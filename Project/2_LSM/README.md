@@ -46,6 +46,8 @@ Vulkan의 가장 기초적인 파이프라인을 구축하여 화면에 삼각�
     * Command Buffer 기록 및 비동기 실행 (Semaphore/Fence)
 
 **📷 실행 결과 (Result)**
+
+
 ![Vulkan Basic Result](./assets/vulkan_basic_result.png)
 
 ---
