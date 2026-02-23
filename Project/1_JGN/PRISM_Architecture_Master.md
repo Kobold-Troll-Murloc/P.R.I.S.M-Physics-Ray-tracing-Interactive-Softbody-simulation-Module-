@@ -126,6 +126,92 @@ struct SoftBodyVertexCPU {
 
 ---
 
+### 2.1.1 Physics Timestep & Sub-stepping
+
+> **연구 담당: 3_HSH (참고용)** — 설계 결과 확인 후 1_JGN 통합 시 반영 예정
+
+**XPBD는 timestep 독립적이다** — PBD와의 결정적 차이.
+
+PBD는 stiffness가 timestep에 종속되어 timestep이 바뀌면 물체가 다르게 움직인다.
+XPBD는 **Compliance(α)** 파라미터로 stiffness를 timestep과 분리하여 물리적으로 일관된 결과를 보장한다.
+
+```
+PBD:  stiffness = f(iteration 횟수, timestep)   → timestep 바뀌면 물성도 바뀜 ✗
+XPBD: stiffness = f(compliance α)               → timestep 독립적 ✓
+
+XPBD Sub-stepping 구조:
+  renderDt = 1/60s  (렌더 프레임 간격)
+  substeps  = N     (설정값, 클수록 정확)
+  physicsDt = renderDt / N
+
+  per render frame:
+    for (int i = 0; i < N; i++):
+        xpbd_solve(physicsDt)   // Compute Dispatch
+    interpolate_for_render()    // 렌더용 위치 보간
+```
+
+**FEM / AI와의 통합 timestep 정책** (추후 구체화 필요):
+- XPBD: sub-step 기반으로 자연스럽게 처리
+- FEM: 별도 안정 조건(CFL condition) 기반 timestep 상한 존재 → 별도 전략 필요
+- AI: 학습 시 사용한 timestep과 추론 시 timestep을 일치시켜야 정확도 유지
+
+---
+
+### 2.1.2 수치 안정성 (Numerical Stability)
+
+> **연구 담당: 3_HSH (참고용)** — 설계 결과 확인 후 1_JGN 통합 시 반영 예정
+
+**XPBD는 PBD 대비 수치 안정성이 근본적으로 높다.**
+
+PBD에서 stiffness를 높이려면 iteration을 늘려야 하고, 이 과정에서 over-correction → 진동 → 폭발이 발생하기 쉬웠다.
+XPBD는 compliance α → 0(rigid)으로 줄여도 constraint correction이 timestep 단위로 분산되어 폭발 조건이 훨씬 엄격해진다.
+
+```
+방법별 안정성 비교:
+
+XPBD  ████████░░  높음  — compliance 기반, sub-step으로 추가 제어 가능
+FEM   █████░░░░░  중간  — CFL 조건 위반 시 발산. stiffness matrix 조건수 문제
+AI    ████████░░  높음  — 학습 데이터 범위 내에서는 안정적, 범위 밖은 미보장
+```
+
+**XPBD 안정성 제어 파라미터:**
+- `compliance α` : 작을수록 rigid. 0에 가까울수록 더 많은 sub-step 필요
+- `substep N`    : 클수록 안정, 비용 증가
+- `iteration`    : constraint solver 반복 횟수, 수렴 속도와 트레이드오프
+
+**FEM의 별도 안정성 전략** (추후 구체화 필요):
+- CFL(Courant–Friedrichs–Lewy) 조건: `physicsDt < 최소_요소_크기 / 파동_속도`
+- 조건수가 높은 stiffness matrix → preconditioning 기법 필요
+- 3_HSH 연구 결과 반영 예정
+
+---
+
+### 2.1.3 SoftBody LOD 시스템
+
+**목표**: 씬 스케일 확장을 위한 핵심 최적화. 카메라 거리에 따라 시뮬레이션 해상도와 렌더링 품질을 단계적으로 조절.
+
+```
+SoftBodyLOD
+├── LOD 레벨 정의
+│   ├── LOD 0 (Near)    풀 해상도 노드 + FEM/XPBD + RT Hybrid
+│   ├── LOD 1 (Mid)     노드 수 감소(Decimated) + XPBD만 + Rasterize
+│   ├── LOD 2 (Far)     최소 노드 + 단순 탄성 근사 + Rasterize
+│   └── LOD 3 (Cull)    시뮬레이션 정지 + Static Mesh로 대체
+│
+├── 적용 범위 (렌더링 + 물리 동시 조절)
+│   ├── Compute Dispatch 해상도  → LOD에 따라 노드 수 다른 SSBO 사용
+│   ├── BLAS 갱신 주기            → LOD 0: 매 프레임 / LOD 2: N 프레임마다
+│   ├── RT 깊이(prism_rt_depth)  → LOD 0: N / LOD 1: 1 / LOD 2+: 0
+│   └── Constraint iteration 수  → LOD 낮을수록 반복 횟수 감소
+│
+└── 전환 조건
+    ├── 카메라 거리 임계값 (설정 가능)
+    ├── 화면 점유 픽셀 수 기반 전환 (더 정확)
+    └── 전환 시 Hysteresis (LOD 0→1 거리 ≠ LOD 1→0 거리, 깜빡임 방지)
+```
+
+---
+
 ### 2.2 Hybrid Renderer
 
 **목표**: Item별 / SubMesh별로 렌더링 방식을 HLMS 기반으로 제어. RT 깊이를 엔진 레벨에서 조절 가능.
@@ -147,7 +233,8 @@ HybridRenderer
 │   ├── [4] RasterizePass      G-Buffer 기록 (RASTERIZE+HYBRID)
 │   ├── [5] RayTracingPass     RT 효과 계산 (RAYTRACING+HYBRID)(커스텀)
 │   ├── [6] CompositePass      G-Buffer + RT 결과 합성
-│   └── [7] PostProcessPass    Denoising, TAA, ToneMapping
+│   ├── [7] PostProcessPass    Denoising, TAA, ToneMapping
+│   └── [8] DebugPass          노드/제약/외력/RT레이 시각화  (추후 논의 예정)
 │
 └── PerItemControl             (아이템 단위 제어)
     ├── RenderQueue 분리       0~49: Rasterize / 50~99: Hybrid / 100~149: RT
@@ -235,9 +322,14 @@ VulkanExtensionLayer
 │   ├── VulkanDevice::buildTLAS(scene)
 │   └── VulkanRenderSystem::traceRays()
 │
-└── Compute 관련
-    ├── VulkanQueue::getComputeEncoder()  (이미 OGRE에 있음, 확인 필요)
-    └── SSBO 더블 버퍼링 구조 (물리 연산 중 렌더링 충돌 방지)
+├── Compute 관련
+│   ├── VulkanQueue::getComputeEncoder()  (이미 OGRE에 있음, 확인 필요)
+│   └── SSBO 더블 버퍼링 구조 (물리 연산 중 렌더링 충돌 방지)
+│
+└── Async Compute Queue  [ 연구 예정 ]
+    ├── Graphics Queue와 Compute Queue 병렬 실행 가능 여부
+    ├── 물리(Compute)와 렌더링(Graphics)을 다른 큐에서 겹쳐 실행 시 GPU 활용률 향상
+    └── OGRE NEXT가 Multi-Queue를 어디까지 지원하는지 확인 필요
 ```
 
 ---
@@ -403,7 +495,10 @@ CollisionSystem (미래, 단순 → 복잡 순서로 구현)
 | 10 | **SSBO 16바이트(vec4) 단위 정렬** | GPU 메모리 접근 규칙, 미준수 시 데이터 오류 |
 | 11 | **interaction_ssbo 기반 인터랙션 구조** | GPU 시뮬레이션에 외부 입력 반영, Dirty Flag 방식 |
 | 12 | 충돌: 구↔노드 단순 형태부터 시작 | 복잡도 단계적 확장 |
-| 13 | 팀 연구 독립 단계 → 추후 통합 | 현재 도메인 연구 단계 |
+| 13 | **SoftBody LOD: 렌더링 + 물리 동시 조절** | 씬 스케일 확장 위한 핵심 최적화 |
+| 14 | **Physics AI: Isaac SIM + FEM 데이터 → 학습 → Compute 포팅** | 학습 파이프라인 방향 확정 |
+| 15 | **Timestep/안정성: 3_HSH 연구 참고 후 통합** | HSH가 연구 중, 결과 확인 후 반영 |
+| 16 | 팀 연구 독립 단계 → 추후 통합 | 현재 도메인 연구 단계 |
 
 ---
 
@@ -412,12 +507,15 @@ CollisionSystem (미래, 단순 → 복잡 순서로 구현)
 | # | 항목 | 왜 미확정인가 | 연구 방향 |
 | :--- | :--- | :--- | :--- |
 | R1 | **HLMS 확장 전략** (A/B/C) | 직접 써봐야 한계 파악 가능 | Listener 실습 → 필요시 상속 전환 |
-| R2 | **Physics AI 모델 구조** | AI 추론을 Compute에서 돌리는 방법 조사 필요 | ONNX→SPIR-V 변환 가능성 / Slang 활용 검토 |
-| R3 | **Tetrahedralization** | FEM을 위한 Tet Mesh 생성 파이프라인 | TetGen, fTetWild 등 라이브러리 조사 |
-| R4 | **Denoising 방식** | RT 1spp 노이즈 처리 방법 결정 안 됨 | SVGF, DLSS RR, 자체 TAA 비교 |
+| R2 | **Physics AI 학습 파이프라인** | 모델 학습 및 Compute 포팅 방법 확정 필요 | Isaac SIM + FEM 시뮬레이션으로 데이터 수집 → 학습 → ONNX → SPIR-V / Slang으로 Compute Shader 포팅 |
+| R3 | **Tetrahedralization** | FEM을 위한 Tet Mesh 생성 파이프라인 | TetGen, fTetWild 등 라이브러리 조사. 런타임 vs 전처리 시점 결정 필요 (→ R8 Asset Pipeline과 연동) |
+| R4 | **Denoising 방식** | RT 1spp + SoftBody 이동 시 Ghosting 문제 | SVGF, DLSS RR, 자체 TAA 비교. 움직이는 연체에서의 Temporal Reprojection 전략 별도 검토 필요 |
 | R5 | **SSBO 더블 버퍼링 설계** | 물리 연산 중 렌더링 데이터 레이스 방지 구조 | Ogre Vulkan Queue 배리어 패턴 분석 |
-| R6 | **SoftBody ↔ Rigid 충돌** | Phase 5 이후 설계 예정 | 우선 BLAS 재활용 가능성 조사 |
+| R6 | **SoftBody ↔ Rigid 충돌** | Phase 5 이후 설계 예정 | 구↔노드 단순 형태부터. BLAS 충돌 BVH 재활용 가능성 조사 |
 | R7 | **RT 쉐이더와 HLMS 통합** | RayGen/Hit/Miss를 HLMS Piece로 관리 가능한지 | OGRE NEXT SBT 관리 구조 분석 |
+| R8 | **Asset Pipeline** | 메시 포맷, Tet Mesh 전처리 시점 미결정 | 런타임 변환 vs 오프라인 전처리 툴 비교. 추후 연구 예정 |
+| R9 | **Async Compute Queue** | OGRE NEXT Multi-Queue 지원 범위 미파악 | Vulkan Async Compute 구조 분석. 추후 연구 예정 |
+| R10 | **Debug Visualization 시스템** | Compositor Debug Pass 설계 미정 | 노드/제약/RT레이 시각화 방법. 추후 논의 예정 |
 
 ---
 
