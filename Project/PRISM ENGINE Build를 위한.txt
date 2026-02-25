@@ -1,0 +1,93 @@
+
+vcpkg 설치를 위한
+
+cd D:\Git
+git clone https://github.com/microsoft/vcpkg.git
+
+cd vcpkg
+.\bootstrap-vcpkg.bat
+
+설치가 끝났다면, 시스템이 vcpkg의 위치를 알 수 있도록 환경 변수를 등록해야한다.
+Windows 검색창에 '시스템 환경 변수 편집' 검색 및 실행
+[환경 변수] 버튼 클릭 -> '사용자 변수' 쪽에 [새로 만들기] 클릭
+
+변수 이름: VCPKG_ROOT
+변수 값: vcpkg를 설치한 전체 경로 (예: D:\Git\vcpkg)
+컴퓨터 종료 후 재시작
+
+
+git clone <우리_프로젝트_Git_주소>
+cd PRISM_Engine
+
+
+# 1. CMake 구성 (Ogre Next, SDL2 다운로드 및 빌드)
+(절대)
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="D:/Git/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+(환경변수 기반 상대경로)
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+(Mac/Linux 사용자는 $env:VCPKG_ROOT 대신 $VCPKG_ROOT를 사용.)
+
+# 2. PRISM 엔진 프로젝트 빌드
+cmake --build build
+
+
+.\build\Debug\PRISM_Engine.exe
+
+
+
+(설정을 변경하면)
+Remove-Item -Recurse -Force build
+로 빌드 날리고 시작
+
+----------------------------------------------------------------------------------------
+CMAKE 찾는 과정..
+cmake_minimum_required(VERSION 3.20)
+project(PRISIM_Engine CXX)
+
+# C++ 17 표준 사용
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# 1. 패키지 이름을 OgreNext가 아닌 OGRE로 찾기
+find_package(OGRE CONFIG REQUIRED COMPONENTS Main HlmsPbs HlmsUnlit)
+find_package(SDL2 CONFIG REQUIRED)
+
+# 실행 파일 타겟 생성
+add_executable(${PROJECT_NAME} src/main.cpp)
+
+# 2. 링크할 타겟 이름도 맞게 변경
+target_link_libraries(${PROJECT_NAME} PRIVATE 
+    OgreMain
+    OgreHlmsPbs
+    OgreHlmsUnlit
+    $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
+    SDL2::SDL2
+)
+----
+
+
+
+
+cmake_minimum_required(VERSION 3.20)
+project(PRISIM_Engine CXX)
+
+# C++ 17 표준 사용
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# 이제 설치가 완료되었으므로 정상적으로 패키지를 찾기
+find_package(OgreNext CONFIG REQUIRED COMPONENTS Main HlmsPbs HlmsUnlit)
+find_package(SDL2 CONFIG REQUIRED)
+
+# 실행 파일 생성
+add_executable(${PROJECT_NAME} src/main.cpp)
+
+# 타겟 링크 (OgreNext:: 네임스페이스 사용)
+target_link_libraries(${PROJECT_NAME} PRIVATE 
+    OgreNext::Main
+    OgreNext::HlmsPbs
+    OgreNext::HlmsUnlit
+    $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
+    SDL2::SDL2
+)

@@ -1,0 +1,13 @@
+# CMake 관련 빌드 폴더
+build/
+out/
+CMakeCache.txt
+CMakeFiles/
+
+# vcpkg 관련 (vcpkg.json 명세서만 공유하면 되니까 폴더는 제외!)
+vcpkg_installed/
+
+# IDE 설정 및 임시 파일 (Visual Studio 등)
+.vs/
+*.user
+*.suo
