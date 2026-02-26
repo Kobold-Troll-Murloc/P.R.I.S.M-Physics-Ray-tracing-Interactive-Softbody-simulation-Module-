@@ -27,6 +27,7 @@ layout(location = 1) rayPayloadEXT bool isShadowed;
 void main()
 {
     // 1. 기본 좌표 계산
+    ivec2 pixelCoord = ivec2(gl_LaunchIDEXT.xy);
     const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
     const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
     vec2 d = inUV * 2.0 - 1.0;

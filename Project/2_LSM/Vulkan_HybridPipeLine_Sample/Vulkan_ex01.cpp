@@ -75,7 +75,7 @@ struct UniformBufferObject {
     glm::mat4 viewInverse;
     glm::mat4 projInverse;
     glm::vec3 cameraPos;
-    float padding1;
+    int frameCount;
     Light lights[3];
     int lightCount;
     float padding2[3];
@@ -123,6 +123,10 @@ struct ObjectInstance {
     glm::vec3 color;
     bool isRaster = false; // true면 래스터화로, false면 레이트레이싱으로 (혹은 둘다)
     bool isDynamic = false; // [추가] true면 Compute Shader가 이동시킴, false면 고정
+    float emissiveIntensity = 0.0f;
+    float roughness = 0.5f;         // 거칠기 (0.0: 완전 매끄러움 ~ 1.0: 완전 거침)
+    float metallic = 0.0f;          // 금속성 (0.0: 비금속/플라스틱 ~ 1.0: 완전 금속)
+    float transmission = 0.0f;      // 투과율 (0.0: 불투명 ~ 1.0: 투명한 유리, 당장은 안 쓰지만 예비용)
 };
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
@@ -272,8 +276,12 @@ private:
     VkBuffer objDescBuffer;
     VkDeviceMemory objDescBufferMemory;
 
-    VkBuffer instanceColorBuffer;
-    VkDeviceMemory instanceColorMemory;
+    /*VkBuffer instanceColorBuffer;
+    VkDeviceMemory instanceColorMemory;*/
+
+    // [수정] 메테리얼로 통합
+    VkBuffer instanceMaterialBuffer;
+    VkDeviceMemory instanceMaterialMemory;
 
     // --- [추가] 래스터화(Rasterization) 관련 변수들 ---
     VkRenderPass renderPass;
@@ -346,6 +354,15 @@ private:
 
 
     // ------------------------------------
+
+    // 누적 이미지 리소스
+    VkImage accumImage;
+    VkDeviceMemory accumImageMemory;
+    VkImageView accumImageView;
+
+    // 누적 프레임 카운터 및 카메라 추적용 변수
+    int accumulationFrameCount = 0;
+    glm::mat4 lastViewMatrix = glm::mat4(1.0f);
 
 
 
@@ -589,7 +606,9 @@ private:
 
         // 3-4. RT용 캔버스 생성
         createStorageImage();
-        createInstanceColorBuffer();
+        createAccumImage();
+        //createInstanceColorBuffer();
+        createInstanceMaterialBuffer();
         createUniformBuffers();
 
         // =========================================================
@@ -645,9 +664,10 @@ private:
             glm::vec3(0.0f, 0.0f, 0.0f),
             glm::vec3(20.0f, 0.1f, 20.0f),
             glm::vec3(0.8f, 0.8f, 0.8f)
-            ,true
+            ,false
             });
 
+        //천장
         objects.push_back({
             "models/cube.obj",
             glm::vec3(0.0f, 12.0f, 0.0f),
@@ -657,7 +677,7 @@ private:
             ,false
             });
 
-
+		// 벽 1 - 밝은 회색
         objects.push_back({
             "models/cube.obj",
             glm::vec3(0.0f, 6.0f, -10.0f),
@@ -667,7 +687,7 @@ private:
             false
             });
 
-
+		// 벽 2(시작 시 왼쪽벽) - 빨간색
         objects.push_back({
             "models/cube.obj",
             glm::vec3(-10.0f, 6.0f, 0.0f),
@@ -676,7 +696,7 @@ private:
             glm::vec3(0.8f, 0.1f, 0.1f),
             false
             });
-
+		// 벽 3(시작 시 오른쪽벽) - 초록색
         objects.push_back({
             "models/cube.obj",
             glm::vec3(10.0f, 6.0f, 0.0f),
@@ -685,7 +705,7 @@ private:
             glm::vec3(0.1f, 0.8f, 0.1f),
             false
             });
-
+        // 테이블 - 갈색
         objects.push_back({
             "models/table.obj",
             glm::vec3(0.0f, -0.9f, 0.0f),
@@ -694,7 +714,7 @@ private:
             glm::vec3(0.55f, 0.27f, 0.07f),
             false
             });
-
+		// 의자 1 - 파랑
         objects.push_back({
             "models/chair.obj",
             glm::vec3(0.0f, -0.9f, 2.5f),
@@ -703,7 +723,7 @@ private:
             glm::vec3(0.2f, 0.2f, 0.6f),
             false
             });
-
+		// 의자 2 - 파랑
         objects.push_back({
             "models/chair.obj",
             glm::vec3(-3.5f, -0.9f, 0.0f),
@@ -712,7 +732,7 @@ private:
             glm::vec3(0.2f, 0.2f, 0.6f),
             false
             });
-
+        // 피기뱅크 - 주황색, 오른쪽꺼
         objects.push_back({
             "models/PiggyBank.obj",
             glm::vec3(9.0f, 1.95f, 0.0f),
@@ -720,19 +740,25 @@ private:
             glm::vec3(0.6f, 0.6f, 0.6f),
             glm::vec3(1.0f, 0.4f, 0.2f),
             false,
-            false
+            false,
+            0.0f,
+            0.5f,
+            1.0f
             });
-
+		// 피기뱅크 - 빨강색, 왼쪽꺼
         objects.push_back({
             "models/PiggyBank.obj",
             glm::vec3(-2.0f, 1.95f, 0.0f),
             glm::vec3(0.0f, -30.0f, 0.0f),
             glm::vec3(0.6f, 0.6f, 0.6f),
             glm::vec3(1.0f, 0.2f, 0.2f),
-            true,
-            false
+            false,
+            false,
+            0.0f,
+            0.1f,
+            1.0f
             });
-
+		// 테이블 위 큐브, 노란색
         objects.push_back({
             "models/cube.obj",
             glm::vec3(1.5f, 2.1f, 0.5f),
@@ -742,43 +768,56 @@ private:
             false
             });
 
-        // 2. 돼지 저금통 군단 생성 (예: 2,000마리)
-        int countX = 40;
-        int countY = 10;
-        int countZ = 50;
-        float spacing = 0.5f;
+        objects.push_back({
+            "models/cube.obj",
+            glm::vec3(0.0f, 10.0f, 0.0f),  // 천장 높이에 띄움
+            glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3(8.0f, 0.1f, 8.0f),   // [중요] x, z 스케일을 크게 키워서 면적을 넓힙니다!
+            glm::vec3(1.0f, 1.0f, 1.0f),   // 조명의 색상 (완전한 흰색)
+            false, // isRaster (레이 트레이싱에서만 처리되도록)
+            false, // isDynamic
+            10.0f  // ⭐ [핵심] emissiveIntensity: 빛의 강도를 40.0으로 뻥튀기합니다!
+                });
 
-        for (int x = 0; x < countX; x++) {
-            for (int y = 0; y < countY; y++) {
-                for (int z = 0; z < countZ; z++) {
-                    objects.push_back({
-                        /*"models/cube.obj",*/
-                        "models/PiggyBank.obj",
-                        // 공중에 띄워서 배치
-                        glm::vec3((x - countX / 2.0f) * spacing,
-                                  10.0f + y * spacing,
-                                  (z - countZ / 2.0f) * spacing),
-                        glm::vec3(0.0f, 0.0f, 0.0f), // 회전
-                        glm::vec3(0.1f, 0.1f, 0.1f), // 스케일
-                        // 색상을 위치에 따라 알록달록하게
-                        glm::vec3((float)x / countX, (float)y / countY, (float)z / countZ),
-                        true, // isRaster (true로 해야 Raster 파이프라인이 그림)
-                        true  // isDynamic (true여야 Compute Shader가 움직임)
-                        });
-                }
-            }
-        }
+        // 2. 돼지 저금통 군단 생성 (예: 2,000마리)
+        //int countX = 40;
+        //int countY = 10;
+        //int countZ = 50;
+        //float spacing = 0.5f;
+
+        //for (int x = 0; x < countX; x++) {
+        //    for (int y = 0; y < countY; y++) {
+        //        for (int z = 0; z < countZ; z++) {
+        //            objects.push_back({
+        //                /*"models/cube.obj",*/
+        //                "models/PiggyBank.obj",
+        //                // 공중에 띄워서 배치
+        //                glm::vec3((x - countX / 2.0f) * spacing,
+        //                          10.0f + y * spacing,
+        //                          (z - countZ / 2.0f) * spacing),
+        //                glm::vec3(0.0f, 0.0f, 0.0f), // 회전
+        //                glm::vec3(0.1f, 0.1f, 0.1f), // 스케일
+        //                // 색상을 위치에 따라 알록달록하게
+        //                glm::vec3((float)x / countX, (float)y / countY, (float)z / countZ),
+        //                false, // isRaster (true로 해야 Raster 파이프라인이 그림)
+        //                true  // isDynamic (true여야 Compute Shader가 움직임)
+        //                });
+        //        }
+        //    }
+        //}
+
+
 
         lights.resize(2);
 
-        /*lights[0] = {
-            glm::vec3(0.0f, 9.0f, 2.0f),
+        lights[0] = {
+            glm::vec3(0.0f, 9.0f, 20.0f),
             1.2f,
             glm::vec3(1.0f, 1.0f, 1.0f),
             1
-        };*/
+        };
 
-        lights[0] = {
+        lights[1] = {
             glm::vec3(-8.0f, 5.0f, -5.0f),
             0.5f,
             glm::vec3(0.0f, 0.0f, 0.9f),
@@ -911,6 +950,21 @@ private:
         glm::mat4 proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 1.0f, 10000.0f);
 
         proj[1][1] *= -1;
+
+        // [핵심] 카메라가 움직였는지 검사하여 누적 초기화
+        if (view != lastViewMatrix) {
+            accumulationFrameCount = 0; // 카메라가 움직이면 누적 초기화
+            lastViewMatrix = view;
+            // std::cout << "Camera Moved! Reset Frame." << std::endl;
+        }
+        else {
+            //if(accumulationFrameCount < 1000)
+                accumulationFrameCount++;   // 가만히 있으면 계속 누적
+                // std::cout << "Accumulating: " << accumulationFrameCount << std::endl;
+        }
+
+        ubo.frameCount = accumulationFrameCount;
+
         ubo.viewInverse = glm::inverse(view);
         ubo.projInverse = glm::inverse(proj);
         ubo.cameraPos = camera.position;
@@ -1642,6 +1696,43 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
+    void createAccumImage() {
+        // 32비트 Float 포맷 사용 (빛 에너지 손실 방지)
+        VkFormat accumFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+
+        createImage(swapChainExtent.width, swapChainExtent.height, accumFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, accumImage, accumImageMemory);
+
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = accumImage;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = accumFormat;
+        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
+        if (vkCreateImageView(device, &viewInfo, nullptr, &accumImageView) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create accumulation image view!");
+        }
+
+        // 초기 레이아웃을 GENERAL로 변경
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL; // 셰이더에서 바로 읽고 쓸 수 있게
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = accumImage;
+        barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        endSingleTimeCommands(commandBuffer);
+    }
+
     void createUniformBuffers() {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
         uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1654,7 +1745,7 @@ private:
         }
     }
 
-    void createInstanceColorBuffer() {
+    /*void createInstanceColorBuffer() {
         struct Color4 { float r, g, b, a; };
 
         std::vector<Color4> colors;
@@ -1674,6 +1765,47 @@ private:
         vkMapMemory(device, instanceColorMemory, 0, sz, 0, &data);
         memcpy(data, colors.data(), sz);
         vkUnmapMemory(device, instanceColorMemory);
+    }*/
+
+    void createInstanceMaterialBuffer() {
+        // 16바이트(vec4) 두 개로 이루어진 완벽한 32바이트 구조체
+        struct InstanceMaterial {
+            glm::vec4 albedo;    // r, g, b: 색상 | a: 투명도 (나중을 위해 보존!)
+            glm::vec4 pbrParams; // x: 발광강도(Emissive) | y: 거칠기 | z: 금속성 | w: (여분/IOR 등)
+        };
+
+        std::vector<InstanceMaterial> materials;
+        materials.reserve(objects.size());
+
+        for (auto& obj : objects) {
+            InstanceMaterial mat{};
+
+            // 1. 색상과 투명도 (알파 채널 1.0으로 온전히 보존)
+            mat.albedo = glm::vec4(obj.color, 1.0f);
+
+            // 2. PBR 파라미터 분리 (발광 강도, 기본 거칠기 0.5, 금속성 0.0)
+            mat.pbrParams = glm::vec4(
+                obj.emissiveIntensity,
+                obj.roughness,
+                obj.metallic,
+                obj.transmission
+            );
+
+            materials.push_back(mat);
+        }
+
+        VkDeviceSize sz = sizeof(InstanceMaterial) * materials.size();
+
+        // 기존 instanceColorBuffer를 그대로 재활용하거나 이름만 바꾸어 생성합니다.
+        createBuffer(sz,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            instanceMaterialBuffer, instanceMaterialMemory); // 이름은 편의상 기존 변수명 유지
+
+        void* data;
+        vkMapMemory(device, instanceMaterialMemory, 0, sz, 0, &data);
+        memcpy(data, materials.data(), sz);
+        vkUnmapMemory(device, instanceMaterialMemory);
     }
 
 
@@ -2051,7 +2183,7 @@ private:
     }
 
     void createRTDescriptorSetLayout() {
-        std::array<VkDescriptorSetLayoutBinding, 6> bindings{};
+        std::array<VkDescriptorSetLayoutBinding, 7> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
         bindings[0].descriptorCount = 1;
@@ -2085,6 +2217,12 @@ private:
         depthBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
         bindings[5] = depthBinding;
 
+        // Binding 6: Accumulation Image
+        bindings[6].binding = 6;
+        bindings[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bindings[6].descriptorCount = 1;
+        bindings[6].stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -2100,7 +2238,7 @@ private:
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
         poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT;
+        poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT * 2;
         poolSizes[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[2].descriptorCount = MAX_FRAMES_IN_FLIGHT;
         poolSizes[3] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, MAX_FRAMES_IN_FLIGHT };
@@ -2138,6 +2276,10 @@ private:
             descASInfo.accelerationStructureCount = 1;
             descASInfo.pAccelerationStructures = &topLevelAS;
 
+            VkDescriptorImageInfo accumImageInfo{};
+            accumImageInfo.imageView = accumImageView;
+            accumImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageView = storageImageView;
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -2147,10 +2289,10 @@ private:
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
-            VkDescriptorBufferInfo colorBufInfo{};
-            colorBufInfo.buffer = instanceColorBuffer;
-            colorBufInfo.offset = 0;
-            colorBufInfo.range = VK_WHOLE_SIZE;
+            VkDescriptorBufferInfo materialBufInfo{};
+            materialBufInfo.buffer = instanceMaterialBuffer;
+            materialBufInfo.offset = 0;
+            materialBufInfo.range = VK_WHOLE_SIZE;
 
             VkDescriptorBufferInfo objDescInfo{};
             objDescInfo.buffer = objDescBuffer;
@@ -2163,7 +2305,7 @@ private:
             depthImageInfo.imageView = depthImageView;
             depthImageInfo.sampler = depthSampler;
 
-            std::array<VkWriteDescriptorSet, 6> descriptorWrites{};
+            std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = rtDescriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
@@ -2190,7 +2332,7 @@ private:
             descriptorWrites[3].dstBinding = 3;
             descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrites[3].descriptorCount = 1;
-            descriptorWrites[3].pBufferInfo = &colorBufInfo;
+            descriptorWrites[3].pBufferInfo = &materialBufInfo;
 
 
             descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2199,6 +2341,8 @@ private:
             descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrites[4].descriptorCount = 1;
             descriptorWrites[4].pBufferInfo = &objDescInfo;
+
+
 
             // [추가] Descriptor Write 설정
             VkWriteDescriptorSet depthWrite{};
@@ -2210,15 +2354,22 @@ private:
             depthWrite.pImageInfo = &depthImageInfo;
             descriptorWrites[5] = depthWrite;
 
+            descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[6].dstSet = rtDescriptorSets[i];
+            descriptorWrites[6].dstBinding = 6;
+            descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            descriptorWrites[6].descriptorCount = 1;
+            descriptorWrites[6].pImageInfo = &accumImageInfo;
+
             vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
     void createRTPipeline() {
-        auto raygenCode = readFile("shaders/raygen.rgen.spv");
+        auto raygenCode = readFile("shaders/raygenbrdf.rgen.spv");
         auto missCode = readFile("shaders/miss.rmiss.spv");
         auto shadowMissCode = readFile("shaders/shadow.rmiss.spv");
-        auto chitCode = readFile("shaders/closesthit.rchit.spv");
+        auto chitCode = readFile("shaders/closesthitbrdf.rchit.spv");
 
         VkShaderModule raygenModule = createShaderModule(raygenCode);
         VkShaderModule missModule = createShaderModule(missCode);
@@ -2305,7 +2456,7 @@ private:
         pipelineInfo.pStages = shaderStages.data();
         pipelineInfo.groupCount = static_cast<uint32_t>(shaderGroups.size());
         pipelineInfo.pGroups = shaderGroups.data();
-        pipelineInfo.maxPipelineRayRecursionDepth = 2;
+        pipelineInfo.maxPipelineRayRecursionDepth = 3;
         pipelineInfo.layout = rtPipelineLayout;
 
         auto vkCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(device, "vkCreateRayTracingPipelinesKHR");
@@ -2667,6 +2818,7 @@ private:
 
 
         createStorageImage();
+        createAccumImage();
         createRTDescriptorSets();
     }
 
@@ -2674,6 +2826,11 @@ private:
         vkDestroyImageView(device, storageImageView, nullptr);
         vkDestroyImage(device, storageImage, nullptr);
         vkFreeMemory(device, storageImageMemory, nullptr);
+
+        // [추가] accumImage 삭제
+        vkDestroyImageView(device, accumImageView, nullptr);
+        vkDestroyImage(device, accumImage, nullptr);
+        vkFreeMemory(device, accumImageMemory, nullptr);
 
         // --- [수정] 프레임버퍼 및 Depth 해제 추가 ---
         vkDestroyImageView(device, depthImageView, nullptr);
@@ -2745,8 +2902,8 @@ private:
         vkFreeMemory(device, hitShaderBindingTableMemory, nullptr);
 
         // RT 관련 버퍼
-        vkDestroyBuffer(device, instanceColorBuffer, nullptr);
-        vkFreeMemory(device, instanceColorMemory, nullptr);
+        vkDestroyBuffer(device, instanceMaterialBuffer, nullptr);
+        vkFreeMemory(device, instanceMaterialMemory, nullptr);
         vkDestroyBuffer(device, objDescBuffer, nullptr);
         vkFreeMemory(device, objDescBufferMemory, nullptr);
 
