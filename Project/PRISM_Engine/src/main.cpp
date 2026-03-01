@@ -63,11 +63,10 @@ struct ObjMeshData {
 
 static ObjMeshData LoadObjFile(const std::string& path)
 {
-    std::cout << "[DIAG] Loading OBJ: " << path << "\n";
     std::vector<Ogre::Vector3> positions;
     std::vector<std::vector<int>> faces;
     std::ifstream file(path);
-    if (!file.is_open()) throw std::runtime_error("OBJ Open Fail: " + path);
+    if (!file.is_open()) throw std::runtime_error("OBJ Open Fail");
     std::string line;
     while (std::getline(file, line)) {
         if (line.size() < 2) continue;
@@ -79,8 +78,6 @@ static ObjMeshData LoadObjFile(const std::string& path)
             faces.push_back({a-1, b-1, c-1});
         }
     }
-    if (positions.empty()) throw std::runtime_error("OBJ File is empty or invalid format");
-
     float minX = FLT_MAX, minY = FLT_MAX, minZ = FLT_MAX, maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
     for (auto& p : positions) {
         minX = std::min(minX, p.x); maxX = std::max(maxX, p.x);
@@ -99,11 +96,7 @@ static ObjMeshData LoadObjFile(const std::string& path)
         Ogre::Vector3 n = positions[i].normalisedCopy(); 
         res.vertices[i*6+3] = n.x; res.vertices[i*6+4] = n.y; res.vertices[i*6+5] = n.z;
     }
-    for (auto& f : faces) { 
-        res.indices.push_back((uint16_t)f[0]); 
-        res.indices.push_back((uint16_t)f[1]); 
-        res.indices.push_back((uint16_t)f[2]); 
-    }
+    for (auto& f : faces) { res.indices.push_back((uint16_t)f[0]); res.indices.push_back((uint16_t)f[1]); res.indices.push_back((uint16_t)f[2]); }
     res.bounds = Ogre::Aabb(Ogre::Vector3::ZERO, halfSize);
     res.sphereRadius = halfSize.length();
     return res;
@@ -114,13 +107,9 @@ static ObjMeshData LoadObjFile(const std::string& path)
 // ============================================================
 static Ogre::MeshPtr CreateMesh(const ObjMeshData& data, Ogre::VaoManager* vaoMgr)
 {
-    std::cout << "[DIAG] Creating OGRE Mesh\n";
     Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().createManual("Bunny", "General");
     Ogre::SubMesh* sm = mesh->createSubMesh();
-    Ogre::VertexElement2Vec elements = {
-        Ogre::VertexElement2(Ogre::VET_FLOAT3, Ogre::VES_POSITION), 
-        Ogre::VertexElement2(Ogre::VET_FLOAT3, Ogre::VES_NORMAL)
-    };
+    Ogre::VertexElement2Vec elements = {Ogre::VertexElement2(Ogre::VET_FLOAT3, Ogre::VES_POSITION), Ogre::VertexElement2(Ogre::VET_FLOAT3, Ogre::VES_NORMAL)};
     float* vb = (float*)OGRE_MALLOC_SIMD(sizeof(float)*data.vertices.size(), Ogre::MEMCATEGORY_GEOMETRY);
     memcpy(vb, data.vertices.data(), sizeof(float)*data.vertices.size());
     Ogre::VertexBufferPacked* vbo = vaoMgr->createVertexBuffer(elements, data.vertices.size()/6, Ogre::BT_IMMUTABLE, vb, true);
@@ -128,18 +117,15 @@ static Ogre::MeshPtr CreateMesh(const ObjMeshData& data, Ogre::VaoManager* vaoMg
     memcpy(ib, data.indices.data(), sizeof(uint16_t)*data.indices.size());
     Ogre::IndexBufferPacked* ibo = vaoMgr->createIndexBuffer(Ogre::IndexBufferPacked::IT_16BIT, data.indices.size(), Ogre::BT_IMMUTABLE, ib, true);
     Ogre::VertexArrayObject* vao = vaoMgr->createVertexArrayObject({vbo}, ibo, Ogre::OT_TRIANGLE_LIST);
-    sm->mVao[Ogre::VpNormal].push_back(vao); 
-    sm->mVao[Ogre::VpShadow].push_back(vao);
-    mesh->_setBounds(data.bounds); 
-    mesh->_setBoundingSphereRadius(data.sphereRadius);
+    sm->mVao[Ogre::VpNormal].push_back(vao); sm->mVao[Ogre::VpShadow].push_back(vao);
+    mesh->_setBounds(data.bounds); mesh->_setBoundingSphereRadius(data.sphereRadius);
     return mesh;
 }
 
 // ============================================================
-// HLMS (High Level Material System) Registration
+// HLMS Registration
 // ============================================================
 static void RegisterHlms(Ogre::Root* root) {
-    std::cout << "[DIAG] Registering HLMS\n";
     using namespace Ogre;
     RenderSystem* rs = root->getRenderSystem();
     String syntax = (rs->getName().find("Direct3D11") != String::npos) ? "HLSL" : "GLSL";
@@ -156,6 +142,10 @@ static void RegisterHlms(Ogre::Root* root) {
         ArchiveVec archLibs;
         for (const auto& p : libPaths)
             archLibs.push_back(archMgr.load("./Media/" + p, "FileSystem", true));
+
+        // [Hybrid Modification Point 1: RT Pieces Supply]
+        // If you created separate .any files for RayTracing, add them here.
+        // archLibs.push_back(archMgr.load("./Media/Hlms/Common/RayTracing", "FileSystem", true));
 
         Hlms* hlms = nullptr;
         if (type == HLMS_PBS) hlms = OGRE_NEW HlmsPbs(archMain, &archLibs);
@@ -177,51 +167,41 @@ int main(int argc, char* argv[]) {
     SetUnhandledExceptionFilter(PrismCrashHandler);
     Ogre::Root* root = nullptr; SDL_Window* sdlWin = nullptr;
     try {
-        if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error("SDL Init Fail");
+        if (SDL_Init(SDL_INIT_VIDEO) != 0) throw std::runtime_error("SDL Fail");
         Ogre::AbiCookie cookie = Ogre::generateAbiCookie();
         root = new Ogre::Root(&cookie, "", "", "PRISM.log");
-        
-        // Load plugins (Try multiple for compatibility)
-        std::vector<std::string> plugins = {"RenderSystem_Direct3D11", "RenderSystem_Vulkan", "RenderSystem_GL3Plus"};
-        for (const auto& p : plugins) {
-            try { root->loadPlugin(p + "_d", false, nullptr); } catch(...) {}
-        }
-        
-        const Ogre::RenderSystemList& rsList = root->getAvailableRenderers();
-        if (rsList.empty()) throw std::runtime_error("No RenderSystem available");
-        root->setRenderSystem(rsList[0]);
+        root->loadPlugin("RenderSystem_Direct3D11_d", false, nullptr);
+        root->setRenderSystem(root->getAvailableRenderers()[0]);
         root->initialise(false);
-        
-        sdlWin = SDL_CreateWindow("PRISM", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_SHOWN);
-        if (!sdlWin) throw std::runtime_error("SDL Window Create Fail");
-
+        sdlWin = SDL_CreateWindow("PRISM", 100, 100, 1280, 720, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
         SDL_SysWMinfo wm; SDL_VERSION(&wm.version); SDL_GetWindowWMInfo(sdlWin, &wm);
         Ogre::NameValuePairList p; p["externalWindowHandle"] = Ogre::StringConverter::toString((size_t)wm.info.win.window);
         auto ogreWin = root->createRenderWindow("PRISM", 1280, 720, false, &p);
-        if (!ogreWin) throw std::runtime_error("Ogre Window Create Fail");
         ogreWin->_setVisible(true);
-        
         RegisterHlms(root);
         auto sm = root->createSceneManager(Ogre::ST_GENERIC, 1u);
+        
+        // Camera setup with aspect ratio fix
         auto cam = sm->createCamera("Cam"); cam->setNearClipDistance(0.1f); cam->setFarClipDistance(1000.0f);
+        cam->setAutoAspectRatio(true);
+        cam->setAspectRatio(1280.0f / 720.0f);
         if (cam->isAttached()) cam->detachFromParent();
         auto camNode = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
         camNode->attachObject(cam);
         
+        // Directional Lights
         auto light = sm->createLight();
         auto lnode = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
-        lnode->attachObject(light);
-        light->setType(Ogre::Light::LT_DIRECTIONAL);
-        lnode->setDirection(Ogre::Vector3(1, -1, -1).normalisedCopy());
-        light->setPowerScale(1.0f); 
+        lnode->attachObject(light); light->setType(Ogre::Light::LT_DIRECTIONAL);
+        lnode->setDirection(Ogre::Vector3(1,-1,-1).normalisedCopy());
+        light->setPowerScale(1.0f);
 
         auto light2 = sm->createLight();
         auto lnode2 = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
-        lnode2->attachObject(light2);
-        light2->setType(Ogre::Light::LT_DIRECTIONAL);
-        lnode2->setDirection(Ogre::Vector3(-1, -1, 1).normalisedCopy());
+        lnode2->attachObject(light2); light2->setType(Ogre::Light::LT_DIRECTIONAL);
+        lnode2->setDirection(Ogre::Vector3(-1,-1,1).normalisedCopy());
         light2->setPowerScale(0.5f);
-
+        
         auto obj = LoadObjFile("bunny.obj");
         auto mesh = CreateMesh(obj, root->getRenderSystem()->getVaoManager());
         auto pbs = static_cast<Ogre::HlmsPbs*>(root->getHlmsManager()->getHlms(Ogre::HLMS_PBS));
@@ -232,13 +212,9 @@ int main(int argc, char* argv[]) {
         node1->attachObject(item1);
         node1->setScale(500.0f, 500.0f, 500.0f);
         node1->setPosition(-40.0f, 0, 0);
-
-        auto matMetal = static_cast<Ogre::HlmsPbsDatablock*>(
-            pbs->createDatablock("MatMetal", "MatMetal", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
-        matMetal->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow); // Set workflow first
-        matMetal->setMetalness(1.0f);
-        matMetal->setRoughness(0.2f);
-        matMetal->setDiffuse(Ogre::Vector3(0.5f, 0.5f, 0.5f)); 
+        auto matMetal = static_cast<Ogre::HlmsPbsDatablock*>(pbs->createDatablock("MatMetal", "MatMetal", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
+        matMetal->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+        matMetal->setMetalness(1.0f); matMetal->setRoughness(0.2f); matMetal->setDiffuse(Ogre::Vector3(0.5f, 0.5f, 0.5f));
         item1->setDatablock(matMetal);
 
         // Bunny 2: Plastic (Orange)
@@ -247,17 +223,14 @@ int main(int argc, char* argv[]) {
         node2->attachObject(item2);
         node2->setScale(500.0f, 500.0f, 500.0f);
         node2->setPosition(40.0f, 0, 0);
-
-        auto matPlastic = static_cast<Ogre::HlmsPbsDatablock*>(
-            pbs->createDatablock("MatPlastic", "MatPlastic", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
-        matPlastic->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow); // Set workflow first
-        matPlastic->setMetalness(0.0f); 
-        matPlastic->setRoughness(0.5f); 
-        matPlastic->setDiffuse(Ogre::Vector3(1.0f, 0.2f, 0.0f)); 
+        auto matPlastic = static_cast<Ogre::HlmsPbsDatablock*>(pbs->createDatablock("MatPlastic", "MatPlastic", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
+        matPlastic->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+        matPlastic->setMetalness(0.0f); matPlastic->setRoughness(0.5f); matPlastic->setDiffuse(Ogre::Vector3(1.0f, 0.2f, 0.0f));
         item2->setDatablock(matPlastic);
         
         camNode->setPosition(0, 0, 150); camNode->lookAt(Ogre::Vector3::ZERO, Ogre::Node::TS_WORLD);
         
+        // [Hybrid Modification Point 2: Rendering Process (Compositor) Design]
         auto comp = root->getCompositorManager2();
         comp->createBasicWorkspaceDef("WS", Ogre::ColourValue(0.1f, 0.1f, 0.15f));
         comp->addWorkspace(sm, ogreWin->getTexture(), cam, "WS", true);
@@ -274,6 +247,7 @@ int main(int argc, char* argv[]) {
             while (SDL_PollEvent(&evt)) {
                 if (evt.type == SDL_QUIT) bQuit = true;
                 if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE) bQuit = true;
+                if (evt.type == SDL_WINDOWEVENT && evt.window.event == SDL_WINDOWEVENT_RESIZED) ogreWin->windowMovedOrResized();
             }
             const Uint8* state = SDL_GetKeyboardState(NULL);
             float moveSpeed = 100.0f * deltaTime; float rotSpeed = 1.5f * deltaTime;
@@ -289,10 +263,7 @@ int main(int argc, char* argv[]) {
 
             if (!root->renderOneFrame()) break;
         }
-    } catch (std::exception& e) { 
-        std::cerr << "CRITICAL ERROR: " << e.what() << std::endl; 
-        std::cout.flush();
-    }
+    } catch (std::exception& e) { std::cerr << "Error: " << e.what() << std::endl; }
     if (root) delete root; if (sdlWin) SDL_DestroyWindow(sdlWin); SDL_Quit();
     return 0;
 }
@@ -301,5 +272,34 @@ int main(int argc, char* argv[]) {
 ================================================================================
  [Technical Guide] Hybrid Pipeline (Vulkan Based) Design Strategy with HLMS Pieces
 ================================================================================
-... (중략) ...
+When users separate Rasterization and Ray Tracing logic into individual pieces, 
+HLMS combines and executes them using the following mechanism.
+
+1. HLMS Piece File Structure Example (Media/Hlms/Pbs/Any/Main_ps.any)
+--------------------------------------------------------------------------------
+@piece( custom_ps_posExecution )
+    // 1. Rasterization Phase: Fill G-Buffer
+    @property( hlms_raster_pass )
+        outGNodeNormal = diffuse.rgb; 
+        outGDepth = inPsPos.z;
+    @end
+
+    // 2. Ray Tracing Phase: Ray Query and Reflection Calculation
+    @property( hlms_raytracing_pass )
+        @insertpiece( CustomRayQueryLogic )
+        float3 reflectionColor = TraceRay( sceneAS, rayDir );
+        finalColor += reflectionColor * metalness;
+    @end
+@end
+
+2. C++ Control (Compositor Integration)
+--------------------------------------------------------------------------------
+- pass_scene raster_pass: execute rasterization pass
+- pass_compute ray_tracing_pass: execute RT calculation and composition pass
+
+3. Advantages of Hybrid Design
+--------------------------------------------------------------------------------
+- Material Data Unification: Parameters like Metalness and Roughness are shared.
+- SPIR-V Optimization: Generates optimized SPIR-V with only necessary features.
+================================================================================
 */
