@@ -1,176 +1,176 @@
-05:08:34: Creating resource group General
-05:08:34: Creating resource group Internal
-05:08:34: Creating resource group Autodetect
-05:08:34: SceneManagerFactory for type 'DefaultSceneManager' registered.
-05:08:34: Registering ResourceManager for type Material
-05:08:34: Registering ResourceManager for type Mesh
-05:08:34: Registering ResourceManager for type Mesh2
-05:08:34: Registering ResourceManager for type OldSkeleton
-05:08:34: MovableObjectFactory for type 'ParticleSystem' registered.
-05:08:34: ArchiveFactory for archive type FileSystem registered.
-05:08:34: ArchiveFactory for archive type Zip registered.
-05:08:34: ArchiveFactory for archive type EmbeddedZip registered.
-05:08:34: DDS codec registering
-05:08:34: FreeImage version: 3.18.0
-05:08:34: This program uses FreeImage, a free, open source image library supporting all common bitmap formats. See http://freeimage.sourceforge.net for details
-05:08:34: Supported formats: bmp,ico,jpg,jif,jpeg,jpe,jng,koa,iff,lbm,mng,pbm,pbm,pcd,pcx,pgm,pgm,png,ppm,ppm,ras,tga,targa,tif,tiff,wap,wbmp,wbm,psd,psb,cut,xbm,xpm,gif,hdr,sgi,rgb,rgba,bw,exr,j2k,j2c,jp2,pfm,pct,pict,pic,3fr,arw,bay,bmq,cap,cine,cr2,crw,cs1,dc2,dcr,drf,dsc,dng,erf,fff,ia,iiq,k25,kc2,kdc,mdc,mef,mos,mrw,nef,nrw,orf,pef,ptx,pxn,qtk,raf,raw,rdc,rw2,rwl,rwz,sr2,srf,srw,sti,x3f,webp,jxr,wdp,hdp
-05:08:34: ETC codec registering
-05:08:34: OITD codec registering
-05:08:34: Registering ResourceManager for type HighLevelGpuProgram
-05:08:34: MovableObjectFactory for type 'Decal' registered.
-05:08:34: MovableObjectFactory for type 'InternalCubemapProbe' registered.
-05:08:34: MovableObjectFactory for type 'Entity' registered.
-05:08:34: MovableObjectFactory for type 'Item' registered.
-05:08:34: MovableObjectFactory for type 'Light' registered.
-05:08:34: MovableObjectFactory for type 'Rectangle2Dv2' registered.
-05:08:34: MovableObjectFactory for type 'BillboardSet' registered.
-05:08:34: MovableObjectFactory for type 'ManualObject2' registered.
-05:08:34: MovableObjectFactory for type 'BillboardChain' registered.
-05:08:34: MovableObjectFactory for type 'RibbonTrail' registered.
-05:08:34: MovableObjectFactory for type 'WireAabb' registered.
-05:08:34: *-*-* OGRE Initialising
-05:08:34: *-*-* Version 3.0.0 (Eris)
-05:08:34: Loading library RenderSystem_Direct3D11_d
-05:08:34: Installing plugin: D3D11 RenderSystem
-05:08:34: D3D11: Direct3D11 Rendering Subsystem created.
-05:08:34: D3D11: Driver Detection Starts
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti"
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti (2)"
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti (3)"
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti (4)"
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti (5)"
-05:08:34: D3D11: "Microsoft Basic Render Driver (software)"
-05:08:34: D3D11: Driver Detection Ends
-05:08:34: Plugin successfully installed
-05:08:34: CPU Identifier & Features
-05:08:34: -------------------------
-05:08:34:  *   CPU ID: AuthenticAMD: AMD Ryzen 5 7500F 6-Core Processor
-05:08:34:  *   Logical cores: 12
-05:08:34:  *      SSE: yes
-05:08:34:  *     SSE2: yes
-05:08:34:  *     SSE3: yes
-05:08:34:  *      MMX: yes
-05:08:34:  *   MMXEXT: yes
-05:08:34:  *    3DNOW: no
-05:08:34:  * 3DNOWEXT: no
-05:08:34:  *     CMOV: yes
-05:08:34:  *      TSC: yes
-05:08:34:  *      FPU: yes
-05:08:34:  *      PRO: yes
-05:08:34:  *       HT: no
-05:08:34: -------------------------
-05:08:34: D3D11: Subsystem Initialising
-05:08:34: D3D11: Driver Detection Starts
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti"
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti (2)"
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti (3)"
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti (4)"
-05:08:34: D3D11: "NVIDIA GeForce RTX 4060 Ti (5)"
-05:08:34: D3D11: "Microsoft Basic Render Driver (software)"
-05:08:34: D3D11: Driver Detection Ends
-05:08:34: D3D11: Requested "(default)", selected "NVIDIA GeForce RTX 4060 Ti"
-05:08:34: D3D11: Device Feature Level 11.1
-05:08:34: ***************************************
-05:08:34: *** D3D11: Subsystem Initialized OK ***
-05:08:34: ***************************************
-05:08:34: D3D11RenderSystem::_createRenderWindow "PRISM", 1280x720 windowed  miscParams: externalWindowHandle=3870346 
-05:08:34: Registering ResourceManager for type GpuProgram
-05:08:34: RenderSystem capabilities
-05:08:34: -------------------------
-05:08:34: RenderSystem Name: Direct3D11 Rendering Subsystem
-05:08:34: GPU Vendor: nvidia
-05:08:34: Device Name: NVIDIA GeForce RTX 4060 Ti
-05:08:34: Driver Version: 32.0.15.9186
-05:08:34:  * Fixed function pipeline: no
-05:08:34:  * Hardware generation of mipmaps: yes
-05:08:34:  * Texture blending: yes
-05:08:34:  * Anisotropic texture filtering: yes
-05:08:34:  * Dot product texture operation: yes
-05:08:34:  * Cube mapping: yes
-05:08:34:  * Hardware stencil buffer: yes
-05:08:34:    - Stencil depth: 8
-05:08:34:    - Two sided stencil support: yes
-05:08:34:    - Wrap stencil values: yes
-05:08:34:  * Hardware vertex / index buffers: yes
-05:08:34:  * 32-bit index buffers: yes
-05:08:34:  * Vertex programs: yes
-05:08:34:  * Number of floating-point constants for vertex programs: 512
-05:08:34:  * Number of integer constants for vertex programs: 16
-05:08:34:  * Number of boolean constants for vertex programs: 16
-05:08:34:  * Fragment programs: yes
-05:08:34:  * Number of floating-point constants for fragment programs: 512
-05:08:34:  * Number of integer constants for fragment programs: 16
-05:08:34:  * Number of boolean constants for fragment programs: 16
-05:08:34:  * Geometry programs: yes
-05:08:34:  * Number of floating-point constants for geometry programs: 512
-05:08:34:  * Number of integer constants for geometry programs: 16
-05:08:34:  * Number of boolean constants for geometry programs: 16
-05:08:34:  * Tessellation Hull programs: yes
-05:08:34:  * Number of floating-point constants for tessellation hull programs: 512
-05:08:34:  * Number of integer constants for tessellation hull programs: 16
-05:08:34:  * Number of boolean constants for tessellation hull programs: 16
-05:08:34:  * Tessellation Domain programs: yes
-05:08:34:  * Number of floating-point constants for tessellation domain programs: 512
-05:08:34:  * Number of integer constants for tessellation domain programs: 16
-05:08:34:  * Number of boolean constants for tessellation domain programs: 16
-05:08:34:  * Compute programs: yes
-05:08:34:  * Number of floating-point constants for compute programs: 512
-05:08:34:  * Number of integer constants for compute programs: 16
-05:08:34:  * Number of boolean constants for compute programs: 16
-05:08:34:  * Supported Shader Profiles: cs_5_0 ds_5_0 gs_4_0 gs_4_1 gs_5_0 hlsl hs_5_0 ps_4_0 ps_4_0_level_9_1 ps_4_0_level_9_3 ps_4_1 ps_5_0 vs_4_0 vs_4_0_level_9_1 vs_4_0_level_9_3 vs_4_1 vs_5_0
-05:08:34:  * Texture Compression: yes
-05:08:34:    - DXT: yes
-05:08:34:    - VTC: no
-05:08:34:    - PVRTC: no
-05:08:34:    - ATC: no
-05:08:34:    - ETC1: no
-05:08:34:    - ETC2: no
-05:08:34:    - BC4/BC5: yes
-05:08:34:    - BC6H/BC7: yes
-05:08:34:    - ASTC: no
-05:08:34:  * Hardware Occlusion Query: yes
-05:08:34:  * User clip planes: yes
-05:08:34:  * VET_UBYTE4 vertex element type: yes
-05:08:34:  * Infinite far plane projection: yes
-05:08:34:  * Hardware render-to-texture: yes
-05:08:34:  * Floating point textures: yes
-05:08:34:  * Non-power-of-two textures: yes
-05:08:34:  * 1d textures: yes
-05:08:34:  * Volume textures: yes
-05:08:34:  * Max Texture resolution (2D) 16384
-05:08:34:  * Max Texture resolution (3D) 2048
-05:08:34:  * Max Texture resolution (Cubemaps) 16384
-05:08:34:  * Multiple Render Targets: 8
-05:08:34:    - With different bit depths: yes
-05:08:34:  * Point Sprites: yes
-05:08:34:  * Extended point parameters: yes
-05:08:34:  * Max Point Size: 256
-05:08:34:  * Vertex texture fetch: yes
-05:08:34:  * Number of world matrices: 0
-05:08:34:  * Number of texture units: 16
-05:08:34:  * Stencil buffer depth: 8
-05:08:34:  * Number of vertex blend matrices: 0
-05:08:34:    - Max vertex textures: 4
-05:08:34:    - Vertex textures shared: no
-05:08:34:  * Render to Vertex Buffer : yes
-05:08:34:  * Hardware Atomic Counters: no
-05:08:34:  * Shader 16-bit floating point (half): no
-05:08:34:  * Compute max threads per threadgroup per axis: 1024, 1024, 64
-05:08:34:  * Compute max threads per threadgroup total: 1024
-05:08:34:  * Using Reverse Z: yes
-05:08:34: DefaultWorkQueue('Root') initialising on thread main.
-05:08:34: Particle Renderer Type 'billboard' registered
-05:08:34: OGRE EXCEPTION(6:FileNotFoundException): Data folder provided contains no valid template shader files. Did you provide the right folder location? Check you have the right read pemissions. Folder: ./Media/Hlms/Unlit/HLSL in Hlms::Hlms at D:\Git\vcpkg\buildtrees\ogre-next\src\v3.0.0-3d16ad2943.clean\OgreMain\src\OgreHlms.cpp (line 451)
-05:08:34: DefaultWorkQueue('Root') shutting down on thread main.
-05:08:34: *-*-* OGRE Shutdown
-05:08:34: Unregistering ResourceManager for type OldSkeleton
-05:08:34: Unregistering ResourceManager for type Mesh2
-05:08:34: Unregistering ResourceManager for type Mesh
-05:08:34: Unregistering ResourceManager for type Material
-05:08:34: Unregistering ResourceManager for type HighLevelGpuProgram
-05:08:34: Uninstalling plugin: D3D11 RenderSystem
-05:08:34: D3D11: Shutting down cleanly.
-05:08:34: Unregistering ResourceManager for type GpuProgram
-05:08:34: D3D11: Direct3D11 Rendering Subsystem destroyed.
-05:08:34: Plugin successfully uninstalled
-05:08:34: Unloading library RenderSystem_Direct3D11_d
+05:36:28: Creating resource group General
+05:36:28: Creating resource group Internal
+05:36:28: Creating resource group Autodetect
+05:36:28: SceneManagerFactory for type 'DefaultSceneManager' registered.
+05:36:28: Registering ResourceManager for type Material
+05:36:28: Registering ResourceManager for type Mesh
+05:36:28: Registering ResourceManager for type Mesh2
+05:36:28: Registering ResourceManager for type OldSkeleton
+05:36:28: MovableObjectFactory for type 'ParticleSystem' registered.
+05:36:28: ArchiveFactory for archive type FileSystem registered.
+05:36:28: ArchiveFactory for archive type Zip registered.
+05:36:28: ArchiveFactory for archive type EmbeddedZip registered.
+05:36:28: DDS codec registering
+05:36:28: FreeImage version: 3.18.0
+05:36:28: This program uses FreeImage, a free, open source image library supporting all common bitmap formats. See http://freeimage.sourceforge.net for details
+05:36:28: Supported formats: bmp,ico,jpg,jif,jpeg,jpe,jng,koa,iff,lbm,mng,pbm,pbm,pcd,pcx,pgm,pgm,png,ppm,ppm,ras,tga,targa,tif,tiff,wap,wbmp,wbm,psd,psb,cut,xbm,xpm,gif,hdr,sgi,rgb,rgba,bw,exr,j2k,j2c,jp2,pfm,pct,pict,pic,3fr,arw,bay,bmq,cap,cine,cr2,crw,cs1,dc2,dcr,drf,dsc,dng,erf,fff,ia,iiq,k25,kc2,kdc,mdc,mef,mos,mrw,nef,nrw,orf,pef,ptx,pxn,qtk,raf,raw,rdc,rw2,rwl,rwz,sr2,srf,srw,sti,x3f,webp,jxr,wdp,hdp
+05:36:28: ETC codec registering
+05:36:28: OITD codec registering
+05:36:28: Registering ResourceManager for type HighLevelGpuProgram
+05:36:28: MovableObjectFactory for type 'Decal' registered.
+05:36:28: MovableObjectFactory for type 'InternalCubemapProbe' registered.
+05:36:28: MovableObjectFactory for type 'Entity' registered.
+05:36:28: MovableObjectFactory for type 'Item' registered.
+05:36:28: MovableObjectFactory for type 'Light' registered.
+05:36:28: MovableObjectFactory for type 'Rectangle2Dv2' registered.
+05:36:28: MovableObjectFactory for type 'BillboardSet' registered.
+05:36:28: MovableObjectFactory for type 'ManualObject2' registered.
+05:36:28: MovableObjectFactory for type 'BillboardChain' registered.
+05:36:28: MovableObjectFactory for type 'RibbonTrail' registered.
+05:36:28: MovableObjectFactory for type 'WireAabb' registered.
+05:36:28: *-*-* OGRE Initialising
+05:36:28: *-*-* Version 3.0.0 (Eris)
+05:36:28: Loading library RenderSystem_Direct3D11_d
+05:36:28: Installing plugin: D3D11 RenderSystem
+05:36:28: D3D11: Direct3D11 Rendering Subsystem created.
+05:36:28: D3D11: Driver Detection Starts
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti"
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti (2)"
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti (3)"
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti (4)"
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti (5)"
+05:36:28: D3D11: "Microsoft Basic Render Driver (software)"
+05:36:28: D3D11: Driver Detection Ends
+05:36:28: Plugin successfully installed
+05:36:28: CPU Identifier & Features
+05:36:28: -------------------------
+05:36:28:  *   CPU ID: AuthenticAMD: AMD Ryzen 5 7500F 6-Core Processor
+05:36:28:  *   Logical cores: 12
+05:36:28:  *      SSE: yes
+05:36:28:  *     SSE2: yes
+05:36:28:  *     SSE3: yes
+05:36:28:  *      MMX: yes
+05:36:28:  *   MMXEXT: yes
+05:36:28:  *    3DNOW: no
+05:36:28:  * 3DNOWEXT: no
+05:36:28:  *     CMOV: yes
+05:36:28:  *      TSC: yes
+05:36:28:  *      FPU: yes
+05:36:28:  *      PRO: yes
+05:36:28:  *       HT: no
+05:36:28: -------------------------
+05:36:28: D3D11: Subsystem Initialising
+05:36:28: D3D11: Driver Detection Starts
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti"
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti (2)"
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti (3)"
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti (4)"
+05:36:28: D3D11: "NVIDIA GeForce RTX 4060 Ti (5)"
+05:36:28: D3D11: "Microsoft Basic Render Driver (software)"
+05:36:28: D3D11: Driver Detection Ends
+05:36:28: D3D11: Requested "(default)", selected "NVIDIA GeForce RTX 4060 Ti"
+05:36:28: D3D11: Device Feature Level 11.1
+05:36:28: ***************************************
+05:36:28: *** D3D11: Subsystem Initialized OK ***
+05:36:28: ***************************************
+05:36:28: D3D11RenderSystem::_createRenderWindow "PRISM", 1280x720 windowed  miscParams: externalWindowHandle=5901250 
+05:36:28: Registering ResourceManager for type GpuProgram
+05:36:28: RenderSystem capabilities
+05:36:28: -------------------------
+05:36:28: RenderSystem Name: Direct3D11 Rendering Subsystem
+05:36:28: GPU Vendor: nvidia
+05:36:28: Device Name: NVIDIA GeForce RTX 4060 Ti
+05:36:28: Driver Version: 32.0.15.9186
+05:36:28:  * Fixed function pipeline: no
+05:36:28:  * Hardware generation of mipmaps: yes
+05:36:28:  * Texture blending: yes
+05:36:28:  * Anisotropic texture filtering: yes
+05:36:28:  * Dot product texture operation: yes
+05:36:28:  * Cube mapping: yes
+05:36:28:  * Hardware stencil buffer: yes
+05:36:28:    - Stencil depth: 8
+05:36:28:    - Two sided stencil support: yes
+05:36:28:    - Wrap stencil values: yes
+05:36:28:  * Hardware vertex / index buffers: yes
+05:36:28:  * 32-bit index buffers: yes
+05:36:28:  * Vertex programs: yes
+05:36:28:  * Number of floating-point constants for vertex programs: 512
+05:36:28:  * Number of integer constants for vertex programs: 16
+05:36:28:  * Number of boolean constants for vertex programs: 16
+05:36:28:  * Fragment programs: yes
+05:36:28:  * Number of floating-point constants for fragment programs: 512
+05:36:28:  * Number of integer constants for fragment programs: 16
+05:36:28:  * Number of boolean constants for fragment programs: 16
+05:36:28:  * Geometry programs: yes
+05:36:28:  * Number of floating-point constants for geometry programs: 512
+05:36:28:  * Number of integer constants for geometry programs: 16
+05:36:28:  * Number of boolean constants for geometry programs: 16
+05:36:28:  * Tessellation Hull programs: yes
+05:36:28:  * Number of floating-point constants for tessellation hull programs: 512
+05:36:28:  * Number of integer constants for tessellation hull programs: 16
+05:36:28:  * Number of boolean constants for tessellation hull programs: 16
+05:36:28:  * Tessellation Domain programs: yes
+05:36:28:  * Number of floating-point constants for tessellation domain programs: 512
+05:36:28:  * Number of integer constants for tessellation domain programs: 16
+05:36:28:  * Number of boolean constants for tessellation domain programs: 16
+05:36:28:  * Compute programs: yes
+05:36:28:  * Number of floating-point constants for compute programs: 512
+05:36:28:  * Number of integer constants for compute programs: 16
+05:36:28:  * Number of boolean constants for compute programs: 16
+05:36:28:  * Supported Shader Profiles: cs_5_0 ds_5_0 gs_4_0 gs_4_1 gs_5_0 hlsl hs_5_0 ps_4_0 ps_4_0_level_9_1 ps_4_0_level_9_3 ps_4_1 ps_5_0 vs_4_0 vs_4_0_level_9_1 vs_4_0_level_9_3 vs_4_1 vs_5_0
+05:36:28:  * Texture Compression: yes
+05:36:28:    - DXT: yes
+05:36:28:    - VTC: no
+05:36:28:    - PVRTC: no
+05:36:28:    - ATC: no
+05:36:28:    - ETC1: no
+05:36:28:    - ETC2: no
+05:36:28:    - BC4/BC5: yes
+05:36:28:    - BC6H/BC7: yes
+05:36:28:    - ASTC: no
+05:36:28:  * Hardware Occlusion Query: yes
+05:36:28:  * User clip planes: yes
+05:36:28:  * VET_UBYTE4 vertex element type: yes
+05:36:28:  * Infinite far plane projection: yes
+05:36:28:  * Hardware render-to-texture: yes
+05:36:28:  * Floating point textures: yes
+05:36:28:  * Non-power-of-two textures: yes
+05:36:28:  * 1d textures: yes
+05:36:28:  * Volume textures: yes
+05:36:28:  * Max Texture resolution (2D) 16384
+05:36:28:  * Max Texture resolution (3D) 2048
+05:36:28:  * Max Texture resolution (Cubemaps) 16384
+05:36:28:  * Multiple Render Targets: 8
+05:36:28:    - With different bit depths: yes
+05:36:28:  * Point Sprites: yes
+05:36:28:  * Extended point parameters: yes
+05:36:28:  * Max Point Size: 256
+05:36:28:  * Vertex texture fetch: yes
+05:36:28:  * Number of world matrices: 0
+05:36:28:  * Number of texture units: 16
+05:36:28:  * Stencil buffer depth: 8
+05:36:28:  * Number of vertex blend matrices: 0
+05:36:28:    - Max vertex textures: 4
+05:36:28:    - Vertex textures shared: no
+05:36:28:  * Render to Vertex Buffer : yes
+05:36:28:  * Hardware Atomic Counters: no
+05:36:28:  * Shader 16-bit floating point (half): no
+05:36:28:  * Compute max threads per threadgroup per axis: 1024, 1024, 64
+05:36:28:  * Compute max threads per threadgroup total: 1024
+05:36:28:  * Using Reverse Z: yes
+05:36:28: DefaultWorkQueue('Root') initialising on thread main.
+05:36:28: Particle Renderer Type 'billboard' registered
+05:36:28: OGRE EXCEPTION(6:FileNotFoundException): Data folder provided contains no valid template shader files. Did you provide the right folder location? Check you have the right read pemissions. Folder: ./Media/Hlms/Unlit/HLSL in Hlms::Hlms at D:\Git\vcpkg\buildtrees\ogre-next\src\v3.0.0-3d16ad2943.clean\OgreMain\src\OgreHlms.cpp (line 451)
+05:36:28: DefaultWorkQueue('Root') shutting down on thread main.
+05:36:28: *-*-* OGRE Shutdown
+05:36:28: Unregistering ResourceManager for type OldSkeleton
+05:36:28: Unregistering ResourceManager for type Mesh2
+05:36:28: Unregistering ResourceManager for type Mesh
+05:36:28: Unregistering ResourceManager for type Material
+05:36:28: Unregistering ResourceManager for type HighLevelGpuProgram
+05:36:28: Uninstalling plugin: D3D11 RenderSystem
+05:36:28: D3D11: Shutting down cleanly.
+05:36:28: Unregistering ResourceManager for type GpuProgram
+05:36:28: D3D11: Direct3D11 Rendering Subsystem destroyed.
+05:36:28: Plugin successfully uninstalled
+05:36:28: Unloading library RenderSystem_Direct3D11_d
