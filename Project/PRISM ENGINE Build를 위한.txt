@@ -1,6 +1,7 @@
 ================================================================================
   PRISM Engine - 빌드 가이드 (팀 공유용)
   대상: 1_JGN, 2_LSM, 3_HSH
+  최근 업데이트: 2026-03-02
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -51,35 +52,51 @@
   3. CMake 구성 (최초 1회 또는 빌드 리셋 후)
 --------------------------------------------------------------------------------
 
-  vcpkg.json에 명시된 의존성을 자동 다운로드·빌드한다.
-  ※ ogre-next 첫 빌드는 30분 이상 소요될 수 있다.
-
-  [cmd]
-    cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Debug
+  vcpkg.json에 명시된 의존성을 자동 다운로드, 빌드.
+  ※ ogre-next 첫 빌드는 30분 이상 소요될 수 있음.
 
   [PowerShell]
     cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Debug
 
-  [Mac/Linux]
-    cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Debug
+  [cmd]
+    cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Debug
 
 
 --------------------------------------------------------------------------------
-  4. 빌드
+  4. 빌드 (코드 수정 후 매번 실행)
 --------------------------------------------------------------------------------
 
-    cmake --build build --config Debug
+  ※ 주의: 실행 중인 엔진이 있다면 반드시 종료 후 빌드해야 한다 (LNK1168 방지).
+
+  [PowerShell]
+    cmake --build build --config Debug --target PRISM_Engine
 
   또는 Visual Studio에서 build/PRISM_Engine.sln 열기 → Debug x64 → 빌드
 
 
 --------------------------------------------------------------------------------
-  5. 실행
+  5. 실행 및 확인
 --------------------------------------------------------------------------------
 
+  [실행]
     .\build\Debug\PRISM_Engine.exe
 
-  ※ ESC 키로 종료
+  [조작]
+    - ESC 키: 즉시 종료
+    - 창 닫기 버튼: 종료
+
+  [결과 확인]
+    - 실행 후 약 10프레임 시점에 `build/Debug/screenshot_final.png`가 생성됨.
+    - 배경색(파랑) 위에 흰색 토끼가 보이면 정상.
+
+
+--------------------------------------------------------------------------------
+  원클릭 빌드 및 실행 (추천)
+--------------------------------------------------------------------------------
+
+  실행 중인 엔진을 끄고, 빌드 후 즉시 실행하는 한 줄 명령어 (PowerShell 전용):
+
+    taskkill /F /IM PRISM_Engine.exe; cmake --build build --config Debug --target PRISM_Engine; if ($?) { .\build\Debug\PRISM_Engine.exe }
 
 
 --------------------------------------------------------------------------------
@@ -111,57 +128,29 @@
   해결된 이슈 (팀 참고용)
 ================================================================================
 
+  ▸ HLMS 초기화 (2026-03-02 수정)
+    - 문제: 셰이더 템플릿 경로 설정 오류로 렌더링이 안 됨.
+    - 해결: Ogre 표준 `getDefaultPaths`를 사용하여 Main/Library Archive를 정확히 분리 등록.
+
+  ▸ 모델 가시성 및 원점 (2026-03-02 수정)
+    - 문제: `bunny.obj`가 너무 작고 원점에서 벗어나 있어 화면에 안 보임.
+    - 해결: 로딩 시 모델 중심을 (0,0,0)으로 정렬하고, 스케일을 500배로 키움.
+
+  ▸ 카메라 중복 부착
+    - 문제: `createCamera` 시 자동 생성된 노드와 수동 노드 간 충돌로 크래시 발생.
+    - 해결: 부착 전 `if (cam->isAttached()) cam->detachFromParent();` 로직 추가.
+
+  ▸ 렌더러 우선순위
+    - Windows 환경의 안정성을 위해 `Direct3D11`을 우선 선택하도록 로직 조정됨 (main.cpp).
+    - Vulkan 사용 시에는 드라이버 및 셰이더 컴파일 환경 확인 필요.
+
+  ▸ bunny.obj 및 리소스 경로
+    - 이제 하드코딩이 아닌 실행 파일 기준 상대 경로로 로드됨.
+    - CMake POST_BUILD가 `bunny.obj`와 HLMS 셰이더를 자동으로 복사함.
+
   ▸ loadPlugin 시그니처
-    잘못된 예: root->loadPlugin("RenderSystem_Vulkan_d");          // 2인수 → 링크 에러
-    올바른 예: root->loadPlugin("RenderSystem_Vulkan_d", false, nullptr);  // 3인수
-
-  ▸ OGRE_DEBUG_MODE vs _DEBUG
-    vcpkg 빌드에서 OGRE_DEBUG_MODE는 항상 0.
-    Debug 빌드 판별은 반드시 _DEBUG 매크로를 사용:
-
-      #if defined(_DEBUG)
-          root->loadPlugin(plugin + "_d", false, nullptr);
-      #else
-          root->loadPlugin(plugin, false, nullptr);
-      #endif
-
-  ▸ DLL 자동 복사
-    렌더 시스템 플러그인 DLL (RenderSystem_Vulkan_d.dll 등)은 vcpkg가 자동
-    복사하지 않음. CMakeLists.txt POST_BUILD로 자동 복사 설정 완료.
-
-  ▸ OGRE Linker: HlmsPbs / HlmsUnlit
-    find_package(OGRE ...) 만으로는 부족.
-    target_link_libraries에 ${OGRE_HlmsPbs_LIBRARY}, ${OGRE_HlmsUnlit_LIBRARY}
-    명시적 추가 필요.
-
-  ▸ HLMS 셰이더 경로
-    RegisterHlms() 에서 exe 기준 "./Media/Hlms/" 로 로드.
-    CMake POST_BUILD가 vcpkg buildtrees에서 Media/Hlms/ 폴더로 복사.
-    OGRE_HLMS_SOURCE 경로는 VCPKG_ROOT 환경 변수 기반으로 설정됨.
-
-  ▸ bunny.obj 경로
-    현재 main.cpp에 D:/Git/P.R.I.S.M/Project/PRISM_Engine/bunny.obj 하드코딩.
-    다른 경로에 클론한 경우 수정 필요.
-    (향후 상대 경로 또는 cmake 인자로 교체 예정)
-
-
-================================================================================
-  현재 미해결 이슈
-================================================================================
-
-  ■ renderOneFrame() Segfault
-
-    증상: 모든 초기화 완료 후 첫 renderOneFrame() 호출에서 즉시 크래시 (exit 139)
-    로그 마지막 항목: _hlmsSamplerblockCreated (Vulkan device 초기화 완료 시점)
-
-    조사 방향:
-      1. addWorkspace() 반환값(CompositorWorkspace*)이 null인지 확인
-      2. Camera를 SceneNode에 attach하는 표준 패턴 적용
-         (현재 setPosition/lookAt만 사용, attachObject 미적용)
-      3. VpShadow에 동일 VAO 공유 시 문제 여부
-         (현재 VpNormal 과 동일 VAO를 VpShadow에도 push)
-      4. Vulkan 첫 프레임 GLSL → SPIR-V 컴파일 실패 가능성
-      5. ogreWindow->getTexture() null 여부 점검
+    잘못된 예: root->loadPlugin("RenderSystem_Vulkan_d");
+    올바른 예: root->loadPlugin("RenderSystem_Vulkan_d", false, nullptr); (3인수 필수)
 
 
 ================================================================================
@@ -178,11 +167,10 @@
                             ${OGRE_HlmsUnlit_LIBRARY}
                             SDL2::SDL2 ...)
 
-  POST_BUILD:
-    - RenderSystem_Vulkan_d.dll 복사
-    - RenderSystem_Direct3D11_d.dll 복사
-    - RenderSystem_GL3Plus_d.dll 복사
-    - vulkan-1.dll 복사
-    - Media/Hlms/ 폴더 복사 (VCPKG_ROOT 기반 경로)
+  POST_BUILD (자동 복사 항목):
+    - 각종 RenderSystem DLL 및 vulkan-1.dll
+    - Media/Hlms/ (셰이더 템플릿)
+    - Media/Common/ (PBS용 LTC Matrix 등)
+    - bunny.obj (테스트 모델)
 
 ================================================================================

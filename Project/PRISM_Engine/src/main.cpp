@@ -123,35 +123,51 @@ static Ogre::MeshPtr CreateMesh(const ObjMeshData& data, Ogre::VaoManager* vaoMg
 }
 
 // ============================================================
-// HLMS
+// HLMS (High Level Material System) 등록
+// Ogre Next의 HLMS는 수천 가지 조합의 셰이더를 실시간으로 조립하는 시스템입니다.
+// 이 함수는 셰이더를 조립하는 데 필요한 '부품(조각 파일)'들의 경로를 설정합니다.
 // ============================================================
 static void RegisterHlms(Ogre::Root* root) {
     using namespace Ogre;
     RenderSystem* rs = root->getRenderSystem();
+    
+    // 렌더 시스템에 따라 사용할 셰이더 언어(문법)를 결정합니다.
     String syntax = (rs->getName().find("Direct3D11") != String::npos) ? "HLSL" : "GLSL";
     ArchiveManager& archMgr = ArchiveManager::getSingleton();
     HlmsManager* hlmsMgr = root->getHlmsManager();
 
+    // 개별 HLMS 타입을 등록하는 람다 함수입니다.
     auto reg = [&](HlmsTypes type, const String& name) {
         String mainPath;
         StringVector libPaths;
+        
+        // 1. 해당 HLMS 타입(PBS/Unlit)이 사용하는 엔진 표준 템플릿 경로를 가져옵니다.
+        // mainPath: 셰이더의 입구(Entry point)가 있는 폴더
+        // libPaths: 조명 연산, 수학 함수 등 공통 코드 조각들이 들어있는 폴더들
         if (type == HLMS_PBS) HlmsPbs::getDefaultPaths(mainPath, libPaths);
         else HlmsUnlit::getDefaultPaths(mainPath, libPaths);
 
+        // 2. 실제 파일 시스템 폴더를 엔진용 아카이브(Archive) 데이터로 변환하여 로드합니다.
         Archive* archMain = archMgr.load("./Media/" + mainPath, "FileSystem", true);
         ArchiveVec archLibs;
         for (const auto& p : libPaths)
             archLibs.push_back(archMgr.load("./Media/" + p, "FileSystem", true));
 
+        // 3. 실시간 셰이더 조립 엔진(HLMS 객체)을 생성합니다.
+        // archMain은 셰이더 템플릿의 핵심 골격을, archLibs는 조립에 쓰일 부품들을 제공합니다.
         Hlms* hlms = nullptr;
         if (type == HLMS_PBS) hlms = OGRE_NEW HlmsPbs(archMain, &archLibs);
         else hlms = OGRE_NEW HlmsUnlit(archMain, &archLibs);
+        
+        // 4. 생성된 조립 엔진을 매니저에 등록하여 엔진 전체에서 사용 가능하게 합니다.
         hlmsMgr->registerHlms(hlms);
     };
 
+    // 물리 기반 셰이딩(PBS)과 단순 색상 셰이딩(Unlit) 엔진을 각각 등록합니다.
     reg(HLMS_UNLIT, "Unlit");
     reg(HLMS_PBS, "Pbs");
 
+    // LTC Matrix 등 PBS 연산에 필요한 공통 리소스 위치를 등록하고 초기화합니다.
     ResourceGroupManager::getSingleton().addResourceLocation("./Media/Common", "FileSystem", "General");
     ResourceGroupManager::getSingleton().initialiseAllResourceGroups(true);
 }
@@ -193,18 +209,75 @@ int main(int argc, char* argv[]) {
         lnode->attachObject(light); light->setType(Ogre::Light::LT_DIRECTIONAL);
         lnode->setDirection(Ogre::Vector3(1,-1,-1).normalisedCopy());
         
+        // -------------------------------------------------------
+        // 실제 재질(Datablock) 생성 및 적용
+        // Datablock은 HLMS 조립 공장에 전달하는 '재질 주문서'와 같습니다.
+        // -------------------------------------------------------
         auto pbs = static_cast<Ogre::HlmsPbs*>(root->getHlmsManager()->getHlms(Ogre::HLMS_PBS));
-        auto db = static_cast<Ogre::HlmsPbsDatablock*>(pbs->createDatablock("Mat", "Mat", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
-        db->setDiffuse(Ogre::Vector3(1,1,1)); item->setDatablock(db);
         
+        // 'Mat'이라는 이름의 재질 주문서를 생성합니다.
+        // 이 주문서에는 금속성, 거칠기, 색상 등의 물리적 속성이 정의됩니다.
+        auto db = static_cast<Ogre::HlmsPbsDatablock*>(pbs->createDatablock("Mat", "Mat", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
+        
+        // 반사색(Diffuse)을 흰색(1,1,1)으로 설정합니다.
+        // HLMS는 이 설정을 보고 최종 셰이더에서 색상 계산 방식을 결정합니다.
+        db->setDiffuse(Ogre::Vector3(1,1,1)); 
+        
+        // 토끼 모델(Item)에 이 재질 주문서를 할당합니다.
+        item->setDatablock(db);
+        
+        // 카메라 위치 초기화
         camNode->setPosition(0, 0, 150); camNode->lookAt(Ogre::Vector3::ZERO, Ogre::Node::TS_WORLD);
         
         auto comp = root->getCompositorManager2();
         comp->createBasicWorkspaceDef("WS", Ogre::ColourValue(0.2f, 0.4f, 0.6f));
         comp->addWorkspace(sm, ogreWin->getTexture(), cam, "WS", true);
         
-        int f = 0; while (f < 50) {
+        std::cout << "=== PRISM Control Guide ===\n";
+        std::cout << "[WASD] Move Camera, [Arrows] Rotate Camera, [ESC] Quit\n";
+        std::cout.flush();
+
+        bool bQuit = false;
+        SDL_Event evt;
+        int f = 0;
+        Uint32 lastTime = SDL_GetTicks();
+
+        while (!bQuit) {
+            // 시간 계산 (deltaTime)
+            Uint32 currentTime = SDL_GetTicks();
+            float deltaTime = (currentTime - lastTime) / 1000.0f;
+            lastTime = currentTime;
+
+            while (SDL_PollEvent(&evt)) {
+                if (evt.type == SDL_QUIT) bQuit = true;
+                if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE) bQuit = true;
+            }
+
+            // 키보드 상태 실시간 감지
+            const Uint8* state = SDL_GetKeyboardState(NULL);
+            float moveSpeed = 100.0f * deltaTime; // 초당 100 유닛 이동
+            float rotSpeed = 1.5f * deltaTime;    // 초당 1.5 라디안 회전
+
+            Ogre::Vector3 moveVec = Ogre::Vector3::ZERO;
+            if (state[SDL_SCANCODE_W]) moveVec.z -= 1;
+            if (state[SDL_SCANCODE_S]) moveVec.z += 1;
+            if (state[SDL_SCANCODE_A]) moveVec.x -= 1;
+            if (state[SDL_SCANCODE_D]) moveVec.x += 1;
+            if (state[SDL_SCANCODE_Q]) moveVec.y -= 1;
+            if (state[SDL_SCANCODE_E]) moveVec.y += 1;
+
+            if (moveVec != Ogre::Vector3::ZERO) {
+                camNode->translate(moveVec.normalisedCopy() * moveSpeed, Ogre::Node::TS_LOCAL);
+            }
+
+            // 방향키로 회전
+            if (state[SDL_SCANCODE_LEFT])  camNode->yaw(Ogre::Radian(rotSpeed));
+            if (state[SDL_SCANCODE_RIGHT]) camNode->yaw(Ogre::Radian(-rotSpeed));
+            if (state[SDL_SCANCODE_UP])    camNode->pitch(Ogre::Radian(rotSpeed));
+            if (state[SDL_SCANCODE_DOWN])  camNode->pitch(Ogre::Radian(-rotSpeed));
+
             if (!root->renderOneFrame()) break;
+
             if (f == 10) {
                 Ogre::Image2 img; img.convertFromTexture(ogreWin->getTexture(), 0, 0);
                 img.save("D:/Git/P.R.I.S.M/Project/PRISM_Engine/build/Debug/screenshot_final.png", 0, 1);
