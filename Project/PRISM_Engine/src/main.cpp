@@ -197,34 +197,66 @@ int main(int argc, char* argv[]) {
         auto camNode = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
         camNode->attachObject(cam);
         
-        auto obj = LoadObjFile("bunny.obj");
-        auto mesh = CreateMesh(obj, root->getRenderSystem()->getVaoManager());
-        auto item = sm->createItem(mesh);
-        auto node = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
-        node->attachObject(item);
-        node->setScale(500.0f, 500.0f, 500.0f);
-        
+        // -------------------------------------------------------
+        // 광원 설정 (PBS는 매우 강한 빛이 필요합니다)
+        // -------------------------------------------------------
         auto light = sm->createLight();
         auto lnode = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
-        lnode->attachObject(light); light->setType(Ogre::Light::LT_DIRECTIONAL);
-        lnode->setDirection(Ogre::Vector3(1,-1,-1).normalisedCopy());
+        lnode->attachObject(light);
+        light->setType(Ogre::Light::LT_DIRECTIONAL);
+        lnode->setDirection(Ogre::Vector3(1, -1, -1).normalisedCopy());
+        light->setPowerScale(Ogre::Math::PI * 2.0f); // 빛의 세기를 강화 (에너지 보존 법칙 반영)
+
+        // 보조 광원 추가 (반대편에서 비춤)
+        auto light2 = sm->createLight();
+        auto lnode2 = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
+        lnode2->attachObject(light2);
+        light2->setType(Ogre::Light::LT_DIRECTIONAL);
+        lnode2->setDirection(Ogre::Vector3(-1, -1, 1).normalisedCopy());
+        light2->setPowerScale(Ogre::Math::PI * 1.0f);
+
+        auto obj = LoadObjFile("bunny.obj");
+        auto mesh = CreateMesh(obj, root->getRenderSystem()->getVaoManager());
         
-        // -------------------------------------------------------
-        // 실제 재질(Datablock) 생성 및 적용
-        // Datablock은 HLMS 조립 공장에 전달하는 '재질 주문서'와 같습니다.
-        // -------------------------------------------------------
         auto pbs = static_cast<Ogre::HlmsPbs*>(root->getHlmsManager()->getHlms(Ogre::HLMS_PBS));
+
+        // -------------------------------------------------------
+        // 토끼 1: 금속(Metal) 재질 설정
+        // -------------------------------------------------------
+        auto item1 = sm->createItem(mesh);
+        auto node1 = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
+        node1->attachObject(item1);
+        node1->setScale(500.0f, 500.0f, 500.0f);
+        node1->setPosition(-40.0f, 0, 0);
+
+        auto matMetal = static_cast<Ogre::HlmsPbsDatablock*>(
+            pbs->createDatablock("MatMetal", "MatMetal", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
         
-        // 'Mat'이라는 이름의 재질 주문서를 생성합니다.
-        // 이 주문서에는 금속성, 거칠기, 색상 등의 물리적 속성이 정의됩니다.
-        auto db = static_cast<Ogre::HlmsPbsDatablock*>(pbs->createDatablock("Mat", "Mat", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
+        matMetal->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+        // 반사 맵이 없으므로 금속성을 약간 낮춰서 형체가 보이게 조정 (0.8)
+        matMetal->setMetalness(0.8f);
+        matMetal->setRoughness(0.1f);
+        matMetal->setDiffuse(Ogre::Vector3(0.7f, 0.7f, 0.8f)); // 은색 느낌의 기본색
+        matMetal->setSpecular(Ogre::Vector3(1.0f, 1.0f, 1.0f)); // 반사광 강조
+        item1->setDatablock(matMetal);
+
+        // -------------------------------------------------------
+        // 토끼 2: 주황색 플라스틱(Plastic) 재질 설정
+        // -------------------------------------------------------
+        auto item2 = sm->createItem(mesh);
+        auto node2 = sm->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
+        node2->attachObject(item2);
+        node2->setScale(500.0f, 500.0f, 500.0f);
+        node2->setPosition(40.0f, 0, 0);
+
+        auto matPlastic = static_cast<Ogre::HlmsPbsDatablock*>(
+            pbs->createDatablock("MatPlastic", "MatPlastic", Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
         
-        // 반사색(Diffuse)을 흰색(1,1,1)으로 설정합니다.
-        // HLMS는 이 설정을 보고 최종 셰이더에서 색상 계산 방식을 결정합니다.
-        db->setDiffuse(Ogre::Vector3(1,1,1)); 
-        
-        // 토끼 모델(Item)에 이 재질 주문서를 할당합니다.
-        item->setDatablock(db);
+        matPlastic->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+        matPlastic->setMetalness(0.0f); // 비금속
+        matPlastic->setRoughness(0.3f); // 매끄러운 플라스틱
+        matPlastic->setDiffuse(Ogre::Vector3(1.0f, 0.4f, 0.0f)); // 주황색
+        item2->setDatablock(matPlastic);
         
         // 카메라 위치 초기화
         camNode->setPosition(0, 0, 150); camNode->lookAt(Ogre::Vector3::ZERO, Ogre::Node::TS_WORLD);
