@@ -1,0 +1,458 @@
+#version 460
+#extension GL_EXT_ray_tracing : require
+
+// ============================================================================
+// 1. 디스크립터 바인딩 설정
+// ============================================================================
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+
+// [수정 핵심] imageLoad/Store를 쓰려면 rgba8, rgba32f 같은 포맷이 반드시 필요합니다!
+layout(set = 0, binding = 1, rgba8) uniform image2D image;          // 화면 출력용 (LDR)
+layout(set = 0, binding = 5) uniform sampler2D depthMap;            // 래스터라이즈 깊이맵
+layout(set = 0, binding = 6, rgba32f) uniform image2D accumImage;   // [추가] 누적용 (HDR)
+
+struct Light {
+    vec3 position;
+    float intensity;
+    vec3 color;
+    int enabled;
+};
+
+// [추가] frameCount가 들어간 최신 UBO 구조체
+layout(set = 0, binding = 2, std140) uniform UniformBufferObject {
+    mat4 viewInverse;
+    mat4 projInverse;
+    vec3 cameraPos;
+    int frameCount; 
+    Light lights[3];
+    int lightCount;
+    float padding2[3];
+} ubo;
+
+// ============================================================================
+// 2. 페이로드 (가방) 구조체 정의
+// ============================================================================
+struct HitPayload {
+    vec3 hitPos;     // 충돌 위치
+    vec3 normal;     // 법선
+    vec3 geomNormal; // 충돌 회피용 (진짜 법선)
+    vec3 albedo;     // 기본 색상
+    float roughness; // 거칠기
+    float metallic;  // 금속성
+    vec3 emissive;   // 발광 색상
+    float hitT;      // 충돌 거리
+    // --- [누락되었던 부분 추가] ---
+    float specTrans; // 투명도
+    float ior;       // 굴절률
+};
+
+layout(location = 0) rayPayloadEXT HitPayload payload;
+
+// ============================================================================
+// 3. 수학 & 난수 유틸리티
+// ============================================================================
+const float PI = 3.14159265359;
+
+// PCG 난수 생성기
+uint pcg_hash(inout uint seed) {
+    uint state = seed * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    seed = state;
+    return (word >> 22u) ^ word;
+}
+float rand(inout uint seed) { return float(pcg_hash(seed)) / 4294967296.0; }
+
+// TBN 매트릭스 (로컬 -> 월드 변환)
+void createCoordinateSystem(in vec3 N, out vec3 Nt, out vec3 Nb) {
+    vec3 up = abs(N.z) < 0.9999999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    Nt = normalize(cross(up, N));
+    Nb = cross(N, Nt);
+}
+
+// ============================================================================
+// 4. 디즈니 BRDF 핵심 함수들
+// ============================================================================
+vec3 SampleGGX(vec2 xi, float roughness, vec3 N, vec3 V) {
+    float a = max(roughness * roughness, 0.001); 
+    float phi = 2.0 * PI * xi.x;
+    float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a*a - 1.0) * xi.y));
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    vec3 H_local = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    vec3 Nt, Nb;
+    createCoordinateSystem(N, Nt, Nb);
+    vec3 H = normalize(H_local.x * Nt + H_local.y * Nb + H_local.z * N);
+    return reflect(-V, H);
+}
+
+vec3 SampleCosineHemisphere(vec2 xi, vec3 N) {
+    float phi = 2.0 * PI * xi.x;
+    
+    // 코사인 분포의 핵심: 정면(수직)으로 갈수록 많은 광선을 쏘고, 옆으로 갈수록 적게 쏩니다.
+    float cosTheta = sqrt(xi.y); 
+    float sinTheta = sqrt(1.0 - xi.y);
+
+    vec3 L_local = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    vec3 Nt, Nb;
+    createCoordinateSystem(N, Nt, Nb);
+    
+    // 로컬 좌표계를 월드 좌표계(N, Nt, Nb)로 변환하여 방향 벡터 리턴
+    return normalize(L_local.x * Nt + L_local.y * Nb + L_local.z * N);
+}
+
+// --- 1. 정반사(BRDF) 평가 (Normal 인자 추가 및 에너지 보존 적용) ---
+vec3 EvaluateDisneyBRDF(HitPayload p, vec3 V, vec3 L, vec3 N) {
+    vec3 H = normalize(V + L);
+
+    float NdotL = max(dot(N, L), 0.001);
+    float NdotV = max(dot(N, V), 0.001);
+    float NdotH = max(dot(N, H), 0.0);
+    float LdotH = max(dot(L, H), 0.0);
+
+    if (NdotL <= 0.0 || NdotV <= 0.0) return vec3(0.0);
+
+    // [Diffuse] 투명도(specTrans)가 높을수록 난반사는 줄어들어야 에너지 보존이 맞음!
+    float r = max(p.roughness, 0.04);
+    float fd90 = 0.5 + 2.0 * r * LdotH * LdotH;
+    float lightScatter = 1.0 + (fd90 - 1.0) * pow(clamp(1.0 - NdotL, 0.0, 1.0), 5.0);
+    float viewScatter  = 1.0 + (fd90 - 1.0) * pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0);
+    vec3 diffuse = (p.albedo / PI) * lightScatter * viewScatter * (1.0 - p.metallic) * (1.0 - p.specTrans);
+
+    // [Specular]
+    float a = r * r;
+    float a2 = a * a;
+    float dDenom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+    float D = a2 / (PI * dDenom * dDenom);
+
+    vec3 F0 = mix(vec3(0.04), p.albedo, p.metallic);
+    vec3 F = F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
+
+    float r_k = (r + 1.0);
+    float k = (r_k * r_k) / 8.0; 
+    float g1L = NdotL / (NdotL * (1.0 - k) + k);
+    float g1V = NdotV / (NdotV * (1.0 - k) + k);
+    float G = g1L * g1V;
+
+    vec3 specular = (D * F * G) / (4.0 * NdotL * NdotV + 0.0001);
+    return diffuse + specular; // 스펙큘러는 투명도에 관계없이 표면에서 항상 발생함
+}
+
+// --- 3. 통합된 확률 밀도 함수(PDF) ---
+float CalculateBSDF_PDF(HitPayload p, vec3 V, vec3 L, float eta_i, float eta_o, vec3 N) {
+    float probReflection = mix(0.5, 1.0, p.metallic); 
+    float probTransmission = (1.0 - probReflection) * p.specTrans; 
+    float probDiffuse = (1.0 - probReflection) * (1.0 - p.specTrans);
+
+    float totalProb = probReflection + probTransmission + probDiffuse;
+    probReflection /= totalProb;
+    probTransmission /= totalProb;
+    probDiffuse /= totalProb;
+
+    float pdf = 0.0;
+    float NdotL = dot(N, L); // 방향 체크를 위한 원본 부호
+
+    // [경로 1 & 2: 반사 & 난반사]
+    if (NdotL > 0.0) {
+        if (probReflection > 0.0) {
+            vec3 H = normalize(V + L);
+            float NdotH = max(dot(N, H), 0.0);
+            float VdotH = max(dot(V, H), 0.0);
+            
+            float a = max(p.roughness * p.roughness, 0.001);
+            float a2 = a * a;
+            float denom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+            float D = a2 / (PI * denom * denom);
+            
+            float pdf_refl = (D * NdotH) / (4.0 * VdotH + 0.0001);
+            pdf += pdf_refl * probReflection;
+        }
+        if (probDiffuse > 0.0) {
+            float pdf_diff = NdotL / PI;
+            pdf += pdf_diff * probDiffuse;
+        }
+    }
+    // [경로 3: 투과]
+    else if (NdotL < 0.0 && probTransmission > 0.0) {
+        vec3 H = -normalize(eta_i * V + eta_o * L);
+        if (dot(H, N) < 0.0) H = -H;
+
+        float NdotH = max(dot(N, H), 0.0);
+        float VdotH_native = dot(V, H);
+        float LdotH_native = dot(L, H);
+
+        float a = max(p.roughness * p.roughness, 0.001);
+        float a2 = a * a;
+        float denom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+        float D = a2 / (PI * denom * denom);
+
+        float denom_jacob = eta_i * VdotH_native + eta_o * LdotH_native;
+        float jacobian = (eta_o * eta_o * abs(LdotH_native)) / (denom_jacob * denom_jacob + 0.0001);
+        
+        float pdf_trans = D * NdotH * jacobian;
+        pdf += pdf_trans * probTransmission;
+    }
+
+    return max(pdf, 0.0001);
+}
+
+// --- [추가] 디즈니 BSDF: 정확한 유전체 프레넬 공식 ---
+float ExactFresnelDielectric(float cosThetaI, float eta_i, float eta_o) {
+    float sinThetaI = sqrt(max(0.0, 1.0 - cosThetaI * cosThetaI));
+    float sinThetaT = (eta_i / eta_o) * sinThetaI;
+    
+    if (sinThetaT >= 1.0) return 1.0; // 내부 전반사 (TIR)
+    
+    float cosThetaT = sqrt(max(0.0, 1.0 - sinThetaT * sinThetaT));
+    
+    float Rs = ((eta_i * cosThetaI) - (eta_o * cosThetaT)) / ((eta_i * cosThetaI) + (eta_o * cosThetaT));
+    float Rp = ((eta_o * cosThetaI) - (eta_i * cosThetaT)) / ((eta_o * cosThetaI) + (eta_i * cosThetaT));
+    
+    return (Rs * Rs + Rp * Rp) / 2.0;
+}
+
+// --- [추가] 굴절 방향 샘플링 (스넬의 법칙) ---
+vec3 SampleBTDF(vec2 xi, float roughness, vec3 N, vec3 V, float eta_i, float eta_o) {
+    float a = max(roughness * roughness, 0.001); 
+    float phi = 2.0 * PI * xi.x;
+    float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a*a - 1.0) * xi.y));
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    vec3 H_local = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    vec3 Nt, Nb;
+    createCoordinateSystem(N, Nt, Nb);
+    vec3 H = normalize(H_local.x * Nt + H_local.y * Nb + H_local.z * N);
+    
+    // GLSL 내장 refract 함수 사용 (I 벡터는 표면을 향해야 하므로 -V 사용)
+    vec3 L = refract(-V, H, eta_i / eta_o);
+    
+    if (length(L) < 0.001) { // 굴절 불가능(내부 전반사) 시 반사 방향으로 튕겨냄
+        return reflect(-V, H);
+    }
+    return normalize(L);
+}
+
+// --- [추가] Walter et al. 투과(BTDF) 값 평가 ---
+vec3 EvaluateDisneyBTDF(HitPayload p, vec3 V, vec3 L, float eta_i, float eta_o, vec3 N) {
+    vec3 H = -normalize(eta_i * V + eta_o * L); 
+    if (dot(H, N) < 0.0) H = -H;
+
+    // [핵심 수정 포인트]
+    // 굴절은 빛(L)이 반대편으로 넘어가므로 N과 L의 내적이 '음수'가 나옵니다.
+    // 기존의 max(dot(N,L), 0.0)을 쓰면 빛이 증발하므로 반드시 절댓값(abs)을 씌워야 합니다!
+    float absNdotV = max(abs(dot(N, V)), 0.001);
+    float absNdotL = max(abs(dot(N, L)), 0.001);
+    
+    // H 벡터와의 내적은 원래 부호를 유지해야 야코비안 계산이 물리적으로 올바르게 작동합니다.
+    float VdotH_native = dot(V, H);
+    float LdotH_native = dot(L, H); 
+    float NdotH = max(dot(N, H), 0.0);
+
+    // 프레넬 계산 시에도 VdotH의 절댓값을 넣어줍니다.
+    float F = ExactFresnelDielectric(abs(VdotH_native), eta_i, eta_o);
+    
+    float a = max(p.roughness * p.roughness, 0.001);
+    float a2 = a * a;
+    float denom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+    float D = a2 / (PI * denom * denom);
+
+    // 가림 함수(G) 역시 절댓값 넓이를 기반으로 계산
+    float r_k = (p.roughness + 1.0);
+    float k = (r_k * r_k) / 8.0; 
+    float g1L = absNdotL / (absNdotL * (1.0 - k) + k);
+    float g1V = absNdotV / (absNdotV * (1.0 - k) + k);
+    float G = g1L * g1V;
+
+    // Walter et al. 야코비안 보정 계수
+    float term1 = (abs(VdotH_native) * abs(LdotH_native)) / (absNdotV * absNdotL + 0.0001);
+    float denom_jacob = (eta_i * VdotH_native + eta_o * LdotH_native); 
+    float term2 = (eta_o * eta_o) / (denom_jacob * denom_jacob + 0.0001);
+    
+    vec3 btdf = p.albedo * term1 * term2 * (1.0 - F) * G * D;
+    
+    // 투명한 비율(specTrans)만큼만 굴절 결과를 반영합니다.
+    return btdf * (1.0 - p.metallic) * p.specTrans;
+}
+
+
+
+// ============================================================================
+// 5. 메인 함수 (패스 트레이싱 루프)
+// ============================================================================
+void main() {
+    // [에러 해결] pixelCoord를 한 번만 선언합니다.
+    ivec2 pixelCoord = ivec2(gl_LaunchIDEXT.xy);
+
+    // ============= ant-aliasing을 위한 픽셀 내 무작위 샘플링 (Jitter) =============
+    uint seed = pixelCoord.y * gl_LaunchSizeEXT.x + pixelCoord.x + ubo.frameCount * 719393u;
+    // 무조건 정중앙(0.5)을 쏘는 대신, 0.0 ~ 1.0 사이의 무작위 난수를 더해줍니다.
+    vec2 jitter = vec2(rand(seed), rand(seed));
+
+
+    // const vec2 pixelCenter = vec2(pixelCoord) + vec2(0.5);
+    const vec2 pixelCenter = vec2(pixelCoord) + jitter;
+
+
+    const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
+    vec2 d = inUV * 2.0 - 1.0;
+
+    // Phase 2에서 복사해둔 래스터라이즈 배경색을 읽어옵니다.
+    vec3 rasterColor = imageLoad(image, pixelCoord).rgb; 
+
+    // 고유 난수 시드 생성
+    // uint seed = pixelCoord.y * gl_LaunchSizeEXT.x + pixelCoord.x + ubo.frameCount * 719393u;
+
+    // 초기 광선 세팅
+    vec4 target = ubo.projInverse * vec4(d.x, d.y, 1, 1);
+    vec3 rayOrigin = (ubo.viewInverse * vec4(0,0,0,1)).xyz;
+    vec3 rayDir = (ubo.viewInverse * vec4(normalize(target.xyz), 0)).xyz;
+
+    vec3 throughput = vec3(1.0);
+    vec3 pixelColor = vec3(0.0);
+    int maxBounces = 7; // 바운스 횟수 조절 가능
+
+    for(int depth = 0; depth < maxBounces; depth++) {
+        payload.hitT = -1.0; 
+        
+        // 하이브리드 렌더링 뎁스 체크 (첫 광선에만 적용)
+        float tMax = 1e20;
+        if(depth == 0) {
+            float zBuffer = texture(depthMap, inUV).r;
+            if(zBuffer < 1.0) {
+                vec4 clipPos = vec4(d.x, d.y, zBuffer, 1.0);
+                vec4 viewPos = ubo.projInverse * clipPos;
+                vec4 worldPos = ubo.viewInverse * (viewPos / viewPos.w);
+                tMax = distance(rayOrigin, worldPos.xyz) - 0.01; 
+            }
+        }
+
+        traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0x01, 0, 0, 0, 
+                    rayOrigin, 0.001, rayDir, tMax, 0);
+
+        // 허공(하늘)이나 래스터 물체에 맞았을 때의 처리
+        if(payload.hitT < 0.0) {
+            if(depth == 0) {
+                pixelColor = rasterColor; // 래스터 물체 보존
+            } else {
+                pixelColor += throughput * vec3(0.05, 0.05, 0.1); // 스카이박스 조명
+            }
+            break;
+        }
+
+        // 발광체 처리
+        if(length(payload.emissive) > 0.0) {
+            pixelColor += throughput * payload.emissive;
+            break;
+        }
+
+        // --- BSDF (반사 + 투과 + 난반사) 통합 샘플링 ---
+        vec3 V = -rayDir;
+        vec2 xi = vec2(rand(seed), rand(seed));
+        vec3 L;
+        vec3 bsdfValue = vec3(0.0);
+
+        // 1. 빛이 내부에서 나가는 중인지 파악 (IOR 세팅)
+        bool isInside = dot(payload.geomNormal, rayDir) > 0.0;
+
+        vec3 N = isInside ? -payload.normal : payload.normal;
+        vec3 geomN = isInside ? -payload.geomNormal : payload.geomNormal;
+        
+        float eta_i = isInside ? payload.ior : 1.0;
+        float eta_o = isInside ? 1.0 : payload.ior;
+
+        // 2. 확률 계산
+        float probReflection = mix(0.5, 1.0, payload.metallic);
+        float probTransmission = (1.0 - probReflection) * payload.specTrans;
+        float probDiffuse = (1.0 - probReflection) * (1.0 - payload.specTrans);
+
+        float totalProb = probReflection + probTransmission + probDiffuse;
+        probReflection /= totalProb;
+        probTransmission /= totalProb;
+        probDiffuse /= totalProb;
+
+        // 3. 러시안 룰렛 (어느 방향으로 쏠지 방향 L만 결정!)
+        float randVal = rand(seed);
+
+        if (randVal < probReflection) {
+            // [경로 1: 정반사]
+            L = SampleGGX(xi, payload.roughness, N, V);
+        } 
+        else if (randVal < probReflection + probTransmission) {
+            // [경로 2: 투과]
+            L = SampleBTDF(xi, payload.roughness, N, V, eta_i, eta_o);
+        } 
+        else {
+            // [경로 3: 난반사]
+            L = SampleCosineHemisphere(xi, N);
+        }
+
+        // 4. 결정된 L을 바탕으로 BSDF와 통합 PDF 계산
+        if (dot(N, L) > 0.0) {
+            // 빛이 튕겨져 나왔으므로 BRDF 평가 (Diffuse + Specular 둘 다 포함)
+            bsdfValue = EvaluateDisneyBRDF(payload, V, L, N);
+        } else {
+            // 빛이 반대편으로 뚫고 나갔으므로 BTDF 평가
+            bsdfValue = EvaluateDisneyBTDF(payload, V, L, eta_i, eta_o, N);
+        }
+
+        // 새로운 통합 PDF 함수 호출!
+        float pdf = CalculateBSDF_PDF(payload, V, L, eta_i, eta_o, N);
+        float cosTheta = max(abs(dot(N, L)), 0.001); // 투과도 있으므로 abs 적용
+
+        // 5. 처리 결과 누적
+        throughput *= (bsdfValue * cosTheta) / max(pdf, 0.0001);
+
+        // 6. 다음 광선 원점 오프셋 (굴절과 반사 상황에 맞게 밖으로/안으로 밀어줌)
+        const float epsilon = 0.005; 
+        float directionSign = sign(dot(geomN, L));
+        rayOrigin = payload.hitPos + geomN * epsilon * directionSign;
+        rayDir = L;
+    }
+
+    // ============================================================================
+    // 6. 수학적 오류 방지 및 누적 (Accumulation)
+    // ============================================================================
+    
+    // NaN(에러값) 방지
+    if (isnan(pixelColor.x) || isnan(pixelColor.y) || isnan(pixelColor.z) ||
+        isinf(pixelColor.x) || isinf(pixelColor.y) || isinf(pixelColor.z)) {
+        pixelColor = vec3(0.0);
+    }
+
+    // Firefly (하얀 점 노이즈) 방지용 클램핑
+    pixelColor = min(pixelColor, vec3(10.0)); 
+
+    //pixelColor = vec3(float(ubo.frameCount) / 100.0);
+
+    vec3 accumulatedColor = vec3(0.0);
+
+    // 프레임에 따른 이동 평균 누적
+    if (ubo.frameCount > 0) {
+        accumulatedColor = imageLoad(accumImage, pixelCoord).rgb;
+        float weight = 1.0 / float(ubo.frameCount + 1);
+        accumulatedColor = mix(accumulatedColor, pixelColor, weight);
+    } else {
+        // 카메라가 움직이거나 첫 프레임일 땐 초기화
+        accumulatedColor = pixelColor;
+    }
+
+    // 고정밀도 버퍼에 누적 결과 저장 (HDR)
+    imageStore(accumImage, pixelCoord, vec4(accumulatedColor, 1.0));
+
+    // ============================================================================
+    // 7. 포스트 프로세싱 (톤매핑 & 감마 보정) 후 화면 출력
+    // ============================================================================
+    
+    // Reinhard 톤매핑 (HDR -> LDR)
+    // vec3 finalColor = accumulatedColor / (accumulatedColor + vec3(1.0));
+
+    // [새로운 코드] Exposure 톤매핑 적용
+    float exposure = 1.0; // 이 값을 1.5, 2.0으로 올리면 카메라 ISO를 올린 것처럼 씬 전체가 확 밝아집니다!
+    vec3 finalColor = vec3(1.0) - exp(-accumulatedColor * exposure);
+    
+    // 감마 보정 (모니터 출력용)
+    finalColor = pow(finalColor, vec3(1.0 / 2.2));
+
+    // 최종 화면(스왑체인)에 그리기
+    imageStore(image, pixelCoord, vec4(finalColor, 1.0));
+
+}

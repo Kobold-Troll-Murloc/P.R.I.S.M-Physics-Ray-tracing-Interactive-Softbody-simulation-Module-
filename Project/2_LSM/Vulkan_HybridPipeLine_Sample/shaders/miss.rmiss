@@ -10,6 +10,9 @@ struct HitPayload {
     float metallic;
     vec3 emissive;
     float hitT;
+    // --- [추가] ---
+    float specTrans; // 투명도
+    float ior;       // 굴절률
 };
 
 layout(location = 0) rayPayloadInEXT HitPayload payload;

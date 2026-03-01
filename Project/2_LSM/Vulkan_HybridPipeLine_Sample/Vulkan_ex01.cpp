@@ -126,7 +126,9 @@ struct ObjectInstance {
     float emissiveIntensity = 0.0f;
     float roughness = 0.5f;         // 거칠기 (0.0: 완전 매끄러움 ~ 1.0: 완전 거침)
     float metallic = 0.0f;          // 금속성 (0.0: 비금속/플라스틱 ~ 1.0: 완전 금속)
-    float transmission = 0.0f;      // 투과율 (0.0: 불투명 ~ 1.0: 투명한 유리, 당장은 안 쓰지만 예비용)
+    // --- [추가] ---
+    float specTrans = 0.0f; // 투명도 (0.0: 불투명, 1.0: 유리)
+    float ior = 1.5f;       // 굴절률 (공기 1.0, 물 1.33, 유리 1.5)
 };
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
@@ -537,6 +539,46 @@ private:
                 }
             }
             //std::cout << "Computed smooth normals for: " << path << std::endl;
+
+            // [핵심 변경] 정점을 공유하지 않고, 면(Face)마다 독립된 정점을 갖도록 새로 배열을 만듭니다.
+            //std::vector<Vertex> flatVertices;
+            //std::vector<uint32_t> flatIndices;
+
+            //for (size_t i = 0; i < indices.size(); i += 3) {
+            //    uint32_t idx0 = indices[i];
+            //    uint32_t idx1 = indices[i + 1];
+            //    uint32_t idx2 = indices[i + 2];
+
+            //    // 기존에 저장된 정점 위치 정보를 가져옵니다.
+            //    Vertex v0 = vertices[idx0];
+            //    Vertex v1 = vertices[idx1];
+            //    Vertex v2 = vertices[idx2];
+
+            //    // 1. 세 정점을 이용해 이 삼각형 면의 완벽한 수직 방향(Face Normal)을 구합니다.
+            //    glm::vec3 edge1 = v1.pos - v0.pos;
+            //    glm::vec3 edge2 = v2.pos - v0.pos;
+            //    glm::vec3 faceNormal = glm::normalize(glm::cross(edge1, edge2));
+
+            //    // 2. 다른 면과 섞이지 않도록, 이 삼각형 전용 법선을 덮어씌웁니다.
+            //    v0.normal = faceNormal;
+            //    v1.normal = faceNormal;
+            //    v2.normal = faceNormal;
+
+            //    // 3. 새로운 플랫 셰이딩 전용 배열에 밀어 넣습니다. (정점 복제 발생)
+            //    flatVertices.push_back(v0);
+            //    flatVertices.push_back(v1);
+            //    flatVertices.push_back(v2);
+
+            //    // 4. 인덱스도 순서대로 새롭게 엮어줍니다.
+            //    uint32_t newIdx = static_cast<uint32_t>(flatVertices.size()) - 3;
+            //    flatIndices.push_back(newIdx);
+            //    flatIndices.push_back(newIdx + 1);
+            //    flatIndices.push_back(newIdx + 2);
+            //}
+
+            //// 기존의 둥글게 꼬인 데이터를 버리고, 평평하게 펴진 새 데이터로 교체합니다.
+            //vertices = flatVertices;
+            //indices = flatIndices;
         }
 
         geoData.vertexCount = vertices.size();
@@ -664,7 +706,11 @@ private:
             glm::vec3(0.0f, 0.0f, 0.0f),
             glm::vec3(20.0f, 0.1f, 20.0f),
             glm::vec3(0.8f, 0.8f, 0.8f)
-            ,false
+            ,false,
+            false,
+            0.0f,
+            0.5f,
+            1.0f
             });
 
         //천장
@@ -694,7 +740,11 @@ private:
             glm::vec3(0.0f),
             glm::vec3(0.1f, 10.0f, 20.0f),
             glm::vec3(0.8f, 0.1f, 0.1f),
-            false
+            false,
+            false,
+            0.0f,
+            0.5f,
+            1.0f
             });
 		// 벽 3(시작 시 오른쪽벽) - 초록색
         objects.push_back({
@@ -703,7 +753,11 @@ private:
             glm::vec3(0.0f),
             glm::vec3(0.1f, 10.0f, 20.0f),
             glm::vec3(0.1f, 0.8f, 0.1f),
-            false
+            false,
+            false,
+            0.0f,
+            0.5f,
+            1.0f
             });
         // 테이블 - 갈색
         objects.push_back({
@@ -745,27 +799,35 @@ private:
             0.5f,
             1.0f
             });
-		// 피기뱅크 - 빨강색, 왼쪽꺼
+		// 피기뱅크 - 흰색, 왼쪽꺼
         objects.push_back({
             "models/PiggyBank.obj",
             glm::vec3(-2.0f, 1.95f, 0.0f),
             glm::vec3(0.0f, -30.0f, 0.0f),
             glm::vec3(0.6f, 0.6f, 0.6f),
-            glm::vec3(1.0f, 0.2f, 0.2f),
+            glm::vec3(1.0f, 1.0f, 1.0f),
             false,
             false,
             0.0f,
-            0.1f,
-            1.0f
+            0.01f,
+            0.0f,
+            1.0f,
+            1.5f
             });
 		// 테이블 위 큐브, 노란색
         objects.push_back({
-            "models/cube.obj",
+            "models/cube_N.obj",
             glm::vec3(1.5f, 2.1f, 0.5f),
             glm::vec3(0.0f, 45.0f, 0.0f),
             glm::vec3(0.2f, 0.2f, 0.2f),
             glm::vec3(1.0f, 0.8f, 0.0f),
-            false
+            false,
+            false,
+            0.0f,
+            0.05f,
+            0.0f,
+            1.0f,
+            1.31f
             });
 
         objects.push_back({
@@ -776,7 +838,7 @@ private:
             glm::vec3(1.0f, 1.0f, 1.0f),   // 조명의 색상 (완전한 흰색)
             false, // isRaster (레이 트레이싱에서만 처리되도록)
             false, // isDynamic
-            10.0f  // ⭐ [핵심] emissiveIntensity: 빛의 강도를 40.0으로 뻥튀기합니다!
+            4.0f  // ⭐ [핵심] emissiveIntensity: 빛의 강도를 40.0으로 뻥튀기합니다!
                 });
 
         // 2. 돼지 저금통 군단 생성 (예: 2,000마리)
@@ -808,9 +870,9 @@ private:
 
 
 
-        lights.resize(2);
+        lights.resize(0);
 
-        lights[0] = {
+        /*lights[0] = {
             glm::vec3(0.0f, 9.0f, 20.0f),
             1.2f,
             glm::vec3(1.0f, 1.0f, 1.0f),
@@ -822,7 +884,7 @@ private:
             0.5f,
             glm::vec3(0.0f, 0.0f, 0.9f),
             1
-        };
+        };*/
 
         std::cout << "Scene Loaded: " << objects.size() << " objects, " << lights.size() << " lights" << std::endl;
 
@@ -1771,7 +1833,8 @@ private:
         // 16바이트(vec4) 두 개로 이루어진 완벽한 32바이트 구조체
         struct InstanceMaterial {
             glm::vec4 albedo;    // r, g, b: 색상 | a: 투명도 (나중을 위해 보존!)
-            glm::vec4 pbrParams; // x: 발광강도(Emissive) | y: 거칠기 | z: 금속성 | w: (여분/IOR 등)
+            glm::vec4 pbrParams1;  // x: 발광 | y: 거칠기 | z: 금속성 | w: 여분(padding)
+            glm::vec4 pbrParams2;  // x: 투명도(specTrans) | y: 굴절률(ior) | z, w: 여분
         };
 
         std::vector<InstanceMaterial> materials;
@@ -1784,13 +1847,21 @@ private:
             mat.albedo = glm::vec4(obj.color, 1.0f);
 
             // 2. PBR 파라미터 분리 (발광 강도, 기본 거칠기 0.5, 금속성 0.0)
-            mat.pbrParams = glm::vec4(
+            // 첫 번째 PBR 파라미터 그룹
+            mat.pbrParams1 = glm::vec4(
                 obj.emissiveIntensity,
                 obj.roughness,
                 obj.metallic,
-                obj.transmission
+                0.0f // padding
             );
 
+            // 두 번째 PBR 파라미터 그룹 (새로 추가됨!)
+            mat.pbrParams2 = glm::vec4(
+                obj.specTrans,
+                obj.ior,
+                0.0f, // padding
+                0.0f  // padding
+            );
             materials.push_back(mat);
         }
 
@@ -2366,10 +2437,10 @@ private:
     }
 
     void createRTPipeline() {
-        auto raygenCode = readFile("shaders/raygenbrdf.rgen.spv");
+        auto raygenCode = readFile("shaders/raygenbsdf.rgen.spv");
         auto missCode = readFile("shaders/miss.rmiss.spv");
         auto shadowMissCode = readFile("shaders/shadow.rmiss.spv");
-        auto chitCode = readFile("shaders/closesthitbrdf.rchit.spv");
+        auto chitCode = readFile("shaders/closesthitbsdf.rchit.spv");
 
         VkShaderModule raygenModule = createShaderModule(raygenCode);
         VkShaderModule missModule = createShaderModule(missCode);
