@@ -56,10 +56,39 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 )
 
 # OGRE HLMS 셰이더 소스 복사 (런타임에 GPU 셰이더 컴파일용)
-set(OGRE_HLMS_SOURCE "D:/Git/vcpkg/buildtrees/ogre-next/src/v3.0.0-3d16ad2943.clean/Samples/Media/Hlms")
+# VCPKG_ROOT 환경 변수를 사용 — 빌드 전 VCPKG_ROOT 설정 필수 (빌드 가이드 참조)
+set(OGRE_HLMS_SOURCE "$ENV{VCPKG_ROOT}/buildtrees/ogre-next/src/v3.0.0-3d16ad2943.clean/Samples/Media/Hlms")
+
+# 만약 위 경로가 존재하지 않으면 vcpkg_installed 내의 경로를 시도해볼 수 있으나, 
+# 일반적으로 vcpkg는 Media 폴더를 share에 복사하지 않는 경우가 많음.
+if(NOT EXISTS "${OGRE_HLMS_SOURCE}")
+    message(WARNING "OGRE_HLMS_SOURCE path not found: ${OGRE_HLMS_SOURCE}. HLMS shaders might be missing!")
+endif()
+
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${OGRE_HLMS_SOURCE}"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/Media/Hlms"
     COMMENT "Copying HLMS shaders to Media/Hlms/..."
+)
+
+# PBS LTC Matrix DDS 텍스처 복사 (HlmsPbs::loadLtcMatrix() 런타임 로드용)
+set(OGRE_COMMON_DDS "$ENV{VCPKG_ROOT}/buildtrees/ogre-next/src/v3.0.0-3d16ad2943.clean/Samples/Media/2.0/scripts/materials/Common")
+foreach(DDS ltcMatrix0.dds ltcMatrix1.dds brtfLutDfg.dds)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/Media/Common"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${OGRE_COMMON_DDS}/${DDS}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/Media/Common/${DDS}"
+        COMMENT "Copying ${DDS} to Media/Common/..."
+    )
+endforeach()
+
+# bunny.obj 복사 (main.cpp에서 상대 경로로 로드 가능하도록)
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/bunny.obj"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/bunny.obj"
+    COMMENT "Copying bunny.obj to build directory..."
 )
