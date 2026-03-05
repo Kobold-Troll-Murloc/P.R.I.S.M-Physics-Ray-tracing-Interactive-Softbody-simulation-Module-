@@ -1,0 +1,101 @@
+diff --git a/RenderSystems/Vulkan/include/OgreVulkanDevice.h b/RenderSystems/Vulkan/include/OgreVulkanDevice.h
+--- a/RenderSystems/Vulkan/include/OgreVulkanDevice.h
++++ b/RenderSystems/Vulkan/include/OgreVulkanDevice.h
+@@ -138,6 +138,12 @@
+ 
+             // VkPhysicalDevicePipelineCreationCacheControlFeatures
+             VkBool32 pipelineCreationCacheControl;
++
++            // [PRISM] Ray Tracing Features
++            VkBool32 rayTracingPipeline;
++            VkBool32 accelerationStructure;
++            VkBool32 bufferDeviceAddress;
++            VkBool32 runtimeDescriptorArray;
+         };
+ 
+         // clang-format off
+diff --git a/RenderSystems/Vulkan/src/OgreVulkanDevice.cpp b/RenderSystems/Vulkan/src/OgreVulkanDevice.cpp
+--- a/RenderSystems/Vulkan/src/OgreVulkanDevice.cpp
++++ b/RenderSystems/Vulkan/src/OgreVulkanDevice.cpp
+@@ -250,7 +250,7 @@
+                 appInfo.pApplicationName = appName.c_str();
+             appInfo.pEngineName = "Ogre3D Vulkan Engine";
+             appInfo.engineVersion = OGRE_VERSION;
+-            appInfo.apiVersion = VK_MAKE_VERSION( 1, 0, 2 );
++            appInfo.apiVersion = VK_MAKE_VERSION( 1, 2, 0 ); // [PRISM] Force Vulkan 1.2 for RT
+ 
+             VkInstanceCreateInfo createInfo;
+             makeVkStruct( createInfo, VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO );
+@@ -980,6 +980,14 @@
+                 deviceExtensions.push_back( VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME );
+             else if( extensionName == VK_AMD_SHADER_TRINARY_MINMAX_EXTENSION_NAME )
+                 deviceExtensions.push_back( VK_AMD_SHADER_TRINARY_MINMAX_EXTENSION_NAME );
++            else if( extensionName == VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME )
++                deviceExtensions.push_back( VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME );
++            else if( extensionName == VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME )
++                deviceExtensions.push_back( VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME );
++            else if( extensionName == VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME )
++                deviceExtensions.push_back( VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME );
++            else if( extensionName == VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME )
++                deviceExtensions.push_back( VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME );
+             else if( extensionName == VK_KHR_SPIRV_1_4_EXTENSION_NAME )
+                 deviceExtensions.push_back( VK_KHR_SPIRV_1_4_EXTENSION_NAME );
+             else if( extensionName == VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME )
+@@ -1080,11 +1088,51 @@
+             queueCreateInfo[i].pQueuePriorities = queuePriorities[i].begin();
+         }
+ 
+-        VkDeviceCreateInfo createInfo;
+-        makeVkStruct( createInfo, VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO );
++        // [PRISM] Correctly setup features chain manually
++        VkPhysicalDeviceVulkan12Features deviceVulkan12Features;
++        makeVkStruct( deviceVulkan12Features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES );
++        deviceVulkan12Features.bufferDeviceAddress = VK_TRUE;
++        deviceVulkan12Features.shaderOutputViewportIndex = VK_TRUE;
++        deviceVulkan12Features.shaderOutputLayer = VK_TRUE;
++        deviceVulkan12Features.descriptorIndexing = VK_TRUE;
++        deviceVulkan12Features.runtimeDescriptorArray = VK_TRUE;
++
++        VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAsFeatures;
++        makeVkStruct( deviceAsFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR );
++        deviceAsFeatures.accelerationStructure = VK_TRUE;
++        deviceAsFeatures.pNext = &deviceVulkan12Features;
++
++        VkPhysicalDeviceRayTracingPipelineFeaturesKHR deviceRtFeatures;
++        makeVkStruct( deviceRtFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR );
++        deviceRtFeatures.rayTracingPipeline = VK_TRUE;
++        deviceRtFeatures.pNext = &deviceAsFeatures;
++
++        VkPhysicalDeviceFeatures2 deviceFeatures2;
++        makeVkStruct( deviceFeatures2, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 );
++        deviceFeatures2.features = mDeviceFeatures; 
++        deviceFeatures2.features.shaderInt64 = VK_TRUE;
++        deviceFeatures2.features.shaderFloat64 = VK_TRUE;
++        deviceFeatures2.pNext = &deviceRtFeatures;
++
++        VkDeviceCreateInfo createInfo;
++        makeVkStruct( createInfo, VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO );
++
++        createInfo.enabledExtensionCount = static_cast<uint32>( deviceExtensions.size() );
++        createInfo.ppEnabledExtensionNames = deviceExtensions.begin();
++
++        createInfo.queueCreateInfoCount = static_cast<uint32>( queueCreateInfo.size() );
++        createInfo.pQueueCreateInfos = &queueCreateInfo[0];
++
++        createInfo.pNext = &deviceFeatures2;
++        createInfo.pEnabledFeatures = nullptr;
++
++        LogManager::getSingleton().logMessage( "[PRISM] Calling vkCreateDevice with FINAL RT chain..." );
+ 
+-        VkResult result = vkCreateDevice( mPhysicalDevice, &createInfo, NULL, &mDevice );
+-        checkVkResult( this, result, "vkCreateDevice" );
++        VkResult result = vkCreateDevice( mPhysicalDevice, &createInfo, NULL, &mDevice );
++        checkVkResult( this, result, "vkCreateDevice (PRISM Final Mode)" );
++
++        mDeviceExtraFeatures.accelerationStructure = deviceAsFeatures.accelerationStructure;
++        mDeviceExtraFeatures.rayTracingPipeline = deviceRtFeatures.rayTracingPipeline;
++        mDeviceExtraFeatures.bufferDeviceAddress = deviceVulkan12Features.bufferDeviceAddress;
++        mDeviceExtraFeatures.runtimeDescriptorArray = deviceVulkan12Features.runtimeDescriptorArray;
+     }
+     //-------------------------------------------------------------------------
+     bool VulkanDevice::hasDeviceExtension( const IdString extension ) const

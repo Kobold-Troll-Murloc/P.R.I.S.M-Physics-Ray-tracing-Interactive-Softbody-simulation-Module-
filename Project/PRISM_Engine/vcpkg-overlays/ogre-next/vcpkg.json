@@ -1,0 +1,27 @@
+{
+  "name": "ogre-next",
+  "version": "3.0.0",
+  "description": "Object-Oriented Graphics Rendering Engine (PRISM Modified)",
+  "dependencies": [
+    "freeimage",
+    "freetype",
+    "sdl2",
+    "vulkan",
+    "zziplib",
+    "rapidjson",
+    "tinyxml",
+    { "name": "vcpkg-cmake", "host": true },
+    { "name": "vcpkg-cmake-config", "host": true }
+  ],
+  "features": {
+    "vulkan": {
+      "description": "Build Vulkan RenderSystem"
+    },
+    "d3d11": {
+      "description": "Build Direct3D11 RenderSystem"
+    },
+    "gl3plus": {
+      "description": "Build OpenGL 3+ RenderSystem"
+    }
+  }
+}
