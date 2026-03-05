@@ -149,10 +149,28 @@ namespace Ogre
                 if( extensionName == VK_EXT_DEBUG_UTILS_EXTENSION_NAME )
                     enabledExtensions.push_back( VK_EXT_DEBUG_UTILS_EXTENSION_NAME );
 #endif
+                if( extensionName == VK_NV_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME )
+                    enabledExtensions.push_back( VK_NV_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME );
+
                 if( extensionName == VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME )
                     enabledExtensions.push_back(
                         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME );
             }
+            
+            // [PRISM FORCE] Ensure GET_PHYSICAL_DEVICE_PROPERTIES_2 is enabled
+            bool alreadyHasIt = false;
+            for( size_t i=0; i<enabledExtensions.size(); ++i )
+                if( strcmp( enabledExtensions[i], VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME ) == 0 ) alreadyHasIt = true;
+            if( !alreadyHasIt )
+                enabledExtensions.push_back( VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME );
+
+            // [PRISM FORCE ENABLE]
+            bool hasGetProps2 = false;
+            for( auto &ext : enabledExtensions )
+                if( strcmp( ext, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME ) == 0 ) hasGetProps2 = true;
+            
+            if( !hasGetProps2 )
+                enabledExtensions.push_back( VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME );
 
             // Enable supported layers we may want
             for( auto &layer : availableLayers )
@@ -264,7 +282,7 @@ namespace Ogre
                 appInfo.pApplicationName = appName.c_str();
             appInfo.pEngineName = "Ogre3D Vulkan Engine";
             appInfo.engineVersion = OGRE_VERSION;
-            appInfo.apiVersion = VK_MAKE_VERSION( 1, 0, 2 );
+            appInfo.apiVersion = VK_MAKE_VERSION( 1, 2, 0 ); // [PRISM] Force Vulkan 1.2 for RT
 
             VkInstanceCreateInfo createInfo;
             makeVkStruct( createInfo, VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO );
@@ -613,6 +631,16 @@ namespace Ogre
         makeVkStruct( deviceCacheControlFeatures,
                       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES_EXT );
 
+        // [PRISM] RT and Indexing Feature Structs
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAsFeatures;
+        makeVkStruct( deviceAsFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR );
+        VkPhysicalDeviceRayTracingPipelineFeaturesKHR deviceRtFeatures;
+        makeVkStruct( deviceRtFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR );
+        VkPhysicalDeviceVulkan12Features deviceVulkan12Features;
+        makeVkStruct( deviceVulkan12Features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES );
+        VkPhysicalDeviceDescriptorIndexingFeatures deviceIndexingFeatures;
+        makeVkStruct( deviceIndexingFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES );
+
         PFN_vkGetPhysicalDeviceFeatures2KHR GetPhysicalDeviceFeatures2KHR =
             (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(
                 mInstance->mVkInstance, "vkGetPhysicalDeviceFeatures2KHR" );
@@ -634,12 +662,46 @@ namespace Ogre
             lastNext = &deviceCacheControlFeatures.pNext;
         }
 
+        // [PRISM] Link RT features if extensions are present
+        if( hasDeviceExtension( VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME ) )
+        {
+            *lastNext = &deviceAsFeatures;
+            lastNext = &deviceAsFeatures.pNext;
+        }
+        if( hasDeviceExtension( VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME ) )
+        {
+            *lastNext = &deviceRtFeatures;
+            lastNext = &deviceRtFeatures.pNext;
+        }
+        
+        // Always try to link Vulkan 1.2 features (contains BufferDeviceAddress)
+        *lastNext = &deviceVulkan12Features;
+        lastNext = &deviceVulkan12Features.pNext;
+
+        // Always try to link Indexing features for Hybrid
+        *lastNext = &deviceIndexingFeatures;
+        lastNext = &deviceIndexingFeatures.pNext;
+
         GetPhysicalDeviceFeatures2KHR( mPhysicalDevice, &deviceFeatures2 );
+
+        // [PRISM] Force Enable required features for the engine if hardware supports them
+        if (deviceVulkan12Features.bufferDeviceAddress) {
+            deviceVulkan12Features.shaderOutputViewportIndex = VK_TRUE;
+            deviceVulkan12Features.shaderOutputLayer = VK_TRUE;
+        }
+
         mDeviceExtraFeatures.storageInputOutput16 = device16BitStorageFeatures.storageInputOutput16;
         mDeviceExtraFeatures.shaderFloat16 = deviceShaderFloat16Int8Features.shaderFloat16;
         mDeviceExtraFeatures.shaderInt8 = deviceShaderFloat16Int8Features.shaderInt8;
         mDeviceExtraFeatures.pipelineCreationCacheControl =
             deviceCacheControlFeatures.pipelineCreationCacheControl;
+
+        // [PRISM] Sync values back to mDeviceExtraFeatures
+        mDeviceExtraFeatures.accelerationStructure = deviceAsFeatures.accelerationStructure;
+        mDeviceExtraFeatures.rayTracingPipeline = deviceRtFeatures.rayTracingPipeline;
+        mDeviceExtraFeatures.bufferDeviceAddress = deviceVulkan12Features.bufferDeviceAddress;
+        mDeviceExtraFeatures.runtimeDescriptorArray = deviceIndexingFeatures.runtimeDescriptorArray;
+
         return true;
     }
     //-------------------------------------------------------------------------
@@ -932,6 +994,24 @@ namespace Ogre
                 deviceExtensions.push_back( VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME );
             else if( extensionName == VK_AMD_SHADER_TRINARY_MINMAX_EXTENSION_NAME )
                 deviceExtensions.push_back( VK_AMD_SHADER_TRINARY_MINMAX_EXTENSION_NAME );
+            else if( extensionName == VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME )
+                deviceExtensions.push_back( VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME );
+            else if( extensionName == VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME )
+                deviceExtensions.push_back( VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME );
+            else if( extensionName == VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME )
+                deviceExtensions.push_back( VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME );
+            else if( extensionName == VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME )
+                deviceExtensions.push_back( VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME );
+            else if( extensionName == VK_KHR_SPIRV_1_4_EXTENSION_NAME )
+                deviceExtensions.push_back( VK_KHR_SPIRV_1_4_EXTENSION_NAME );
+            else if( extensionName == VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME )
+                deviceExtensions.push_back( VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME );
+            else if( extensionName == VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME )
+                deviceExtensions.push_back( VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME );
+            else if( extensionName == VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME )
+                deviceExtensions.push_back( VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME );
+            else if( extensionName == "VK_KHR_external_memory_win32" )
+                deviceExtensions.push_back( "VK_KHR_external_memory_win32" );
         }
 
         deviceExtensions.push_back( VK_KHR_SWAPCHAIN_EXTENSION_NAME );
@@ -1005,6 +1085,35 @@ namespace Ogre
             queueCreateInfo[i].pQueuePriorities = queuePriorities[i].begin();
         }
 
+        // [PRISM] Correctly setup features chain manually
+        // Note: For Vulkan 1.2+, VkPhysicalDeviceDescriptorIndexingFeatures is part of Vulkan12Features.
+        // Including both can cause validation errors.
+        VkPhysicalDeviceVulkan12Features deviceVulkan12Features;
+        makeVkStruct( deviceVulkan12Features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES );
+        deviceVulkan12Features.bufferDeviceAddress = VK_TRUE;
+        deviceVulkan12Features.shaderOutputViewportIndex = VK_TRUE;
+        deviceVulkan12Features.shaderOutputLayer = VK_TRUE;
+        deviceVulkan12Features.descriptorIndexing = VK_TRUE;
+        deviceVulkan12Features.runtimeDescriptorArray = VK_TRUE;
+
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAsFeatures;
+        makeVkStruct( deviceAsFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR );
+        deviceAsFeatures.accelerationStructure = VK_TRUE;
+        deviceAsFeatures.pNext = &deviceVulkan12Features;
+
+        VkPhysicalDeviceRayTracingPipelineFeaturesKHR deviceRtFeatures;
+        makeVkStruct( deviceRtFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR );
+        deviceRtFeatures.rayTracingPipeline = VK_TRUE;
+        deviceRtFeatures.pNext = &deviceAsFeatures;
+
+        VkPhysicalDeviceFeatures2 deviceFeatures2;
+        makeVkStruct( deviceFeatures2, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 );
+        deviceFeatures2.features = mDeviceFeatures; // Ogre's detected basic features
+        // [PRISM] Explicitly enable 64-bit types required by some RT shaders
+        deviceFeatures2.features.shaderInt64 = VK_TRUE;
+        deviceFeatures2.features.shaderFloat64 = VK_TRUE;
+        deviceFeatures2.pNext = &deviceRtFeatures;
+
         VkDeviceCreateInfo createInfo;
         makeVkStruct( createInfo, VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO );
 
@@ -1014,21 +1123,20 @@ namespace Ogre
         createInfo.queueCreateInfoCount = static_cast<uint32>( queueCreateInfo.size() );
         createInfo.pQueueCreateInfos = &queueCreateInfo[0];
 
-        VkPhysicalDeviceFeatures2 deviceFeatures2;
-        VkPhysicalDevice16BitStorageFeatures device16BitStorageFeatures;
-        VkPhysicalDeviceShaderFloat16Int8Features deviceShaderFloat16Int8Features;
-        VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT deviceCacheControlFeatures;
-        if( fillDeviceFeatures2( deviceFeatures2, device16BitStorageFeatures,
-                                 deviceShaderFloat16Int8Features, deviceCacheControlFeatures ) )
-        {
-            createInfo.pNext = &deviceFeatures2;
-            deviceFeatures2.features = mDeviceFeatures;
-        }
-        else
-            createInfo.pEnabledFeatures = &mDeviceFeatures;
+        createInfo.pNext = &deviceFeatures2;
+        createInfo.pEnabledFeatures = nullptr;
+
+        LogManager::getSingleton().logMessage( "[PRISM] Calling vkCreateDevice with FINAL RT chain..." );
 
         VkResult result = vkCreateDevice( mPhysicalDevice, &createInfo, NULL, &mDevice );
-        checkVkResult( this, result, "vkCreateDevice" );
+        LogManager::getSingleton().logMessage( "[PRISM] vkCreateDevice result: " + StringConverter::toString( (int)result ) );
+        checkVkResult( this, result, "vkCreateDevice (PRISM Final Mode)" );
+
+        // [PRISM] Update ExtraFeatures so engine knows RT is enabled
+        mDeviceExtraFeatures.accelerationStructure = deviceAsFeatures.accelerationStructure;
+        mDeviceExtraFeatures.rayTracingPipeline = deviceRtFeatures.rayTracingPipeline;
+        mDeviceExtraFeatures.bufferDeviceAddress = deviceVulkan12Features.bufferDeviceAddress;
+        mDeviceExtraFeatures.runtimeDescriptorArray = deviceVulkan12Features.runtimeDescriptorArray;
     }
     //-------------------------------------------------------------------------
     bool VulkanDevice::hasDeviceExtension( const IdString extension ) const

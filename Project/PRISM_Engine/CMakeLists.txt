@@ -11,41 +11,69 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCP
 # OGRE 및 SDL2 패키지 찾기
 find_package(OGRE REQUIRED COMPONENTS Main HlmsPbs HlmsUnlit)
 find_package(SDL2 CONFIG REQUIRED)
+find_package(Vulkan REQUIRED)
 
 # 실행 파일 생성
-add_executable(${PROJECT_NAME} src/main.cpp)
+add_executable(${PROJECT_NAME} 
+    src/main.cpp
+    src/PrismRTPipeline.h
+    src/PrismRTPipeline.cpp
+    src/PrismCompositorPass.h
+    src/PrismCompositorPass.cpp
+)
 
 
 set(OGRE_INCLUDE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/include/OGRE-Next")
+set(OGRE_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../1_JGN/ogre-next")
+
 target_include_directories(${PROJECT_NAME} PRIVATE
-    "${OGRE_INCLUDE_ROOT}"
-    "${OGRE_INCLUDE_ROOT}/Hlms/Pbs"
-    "${OGRE_INCLUDE_ROOT}/Hlms/Unlit"
-    "${OGRE_INCLUDE_ROOT}/Hlms/Common"
+    "${OGRE_SOURCE_ROOT}/OgreMain/include"
+    "${OGRE_SOURCE_ROOT}/OgreMain/include/Compositor"
+    "${OGRE_SOURCE_ROOT}/OgreMain/include/Compositor/Pass"
+    "${OGRE_SOURCE_ROOT}/OgreMain/include/Vao"
+    "${OGRE_SOURCE_ROOT}/Components/Hlms/Pbs/include"
+    "${OGRE_SOURCE_ROOT}/Components/Hlms/Unlit/include"
+    "${OGRE_SOURCE_ROOT}/Components/Hlms/Common/include"
+    "${OGRE_SOURCE_ROOT}/RenderSystems/Vulkan/include"
+    "${OGRE_SOURCE_ROOT}/build/include" # For OgreBuildSettings.h
+    "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/include" # For other dependencies
 )
 
-# OgreNext 라이브러리 링크 (OGRE_LIBRARIES에 HlmsPbs/HlmsUnlit가 포함되지 않으므로 별도 추가)
+# Ogre-Next Libraries from 1_JGN build
+set(OGRE_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../1_JGN/ogre-next/build/lib/Debug")
+set(OGRE_BIN_DIR_1_JGN "${CMAKE_CURRENT_SOURCE_DIR}/../1_JGN/ogre-next/build/bin/Debug")
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${OGRE_LIBRARIES}
-    ${OGRE_HlmsPbs_LIBRARY}
-    ${OGRE_HlmsUnlit_LIBRARY}
+    "${OGRE_LIB_DIR}/OgreNextMain_d.lib"
+    "${OGRE_LIB_DIR}/OgreNextHlmsPbs_d.lib"
+    "${OGRE_LIB_DIR}/OgreNextHlmsUnlit_d.lib"
+    "${OGRE_LIB_DIR}/RenderSystem_Vulkan_d.lib"
+    Vulkan::Vulkan
     $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
     SDL2::SDL2
 )
 
-# vcpkg 경로 (Debug/Release 분기)
+# vcpkg path for other dependencies (SDL2, etc)
 set(VCPKG_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}")
 
-# OGRE 렌더 시스템 플러그인 DLL — vcpkg가 자동 복사하지 않으므로 직접 복사
-set(OGRE_PLUGIN_DLLS RenderSystem_Vulkan RenderSystem_Direct3D11 RenderSystem_GL3Plus)
+# Copy DLLs from 1_JGN Ogre build
+set(OGRE_PLUGIN_DLLS RenderSystem_Vulkan RenderSystem_Direct3D11 RenderSystem_GL3Plus OgreNextMain)
 foreach(DLL ${OGRE_PLUGIN_DLLS})
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<IF:$<CONFIG:Debug>,${VCPKG_BIN_DIR}/debug/bin/${DLL}_d.dll,${VCPKG_BIN_DIR}/bin/${DLL}.dll>"
+            "${OGRE_BIN_DIR_1_JGN}/${DLL}_d.dll"
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-        COMMENT "Copying ${DLL}..."
+        COMMENT "Copying ${DLL}_d.dll from 1_JGN..."
     )
 endforeach()
+
+# Copy RT shaders
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders"
+    COMMENT "Copying PRISM RT shaders to build directory..."
+)
 
 # vulkan-1.dll (Debug suffix 없음)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
