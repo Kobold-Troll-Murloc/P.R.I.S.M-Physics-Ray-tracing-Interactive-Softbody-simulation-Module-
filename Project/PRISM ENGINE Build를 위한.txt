@@ -1,7 +1,7 @@
 ================================================================================
   PRISM Engine - 빌드 가이드 (팀 공유용)
   대상: 1_JGN, 2_LSM, 3_HSH
-  최근 업데이트: 2026-03-02
+  최근 업데이트: 2026-03-08
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -15,7 +15,7 @@
   Visual Studio 2022   17.x 이상    [C++ 데스크톱 개발] 워크로드 필수
   CMake                3.20 이상    https://cmake.org/download/
   Git                  최신
-  Vulkan SDK           1.3 이상     https://vulkan.lunarg.com/
+  Vulkan SDK           1.3 이상     https://vulkan.lunarg.com/ (glslangValidator 필수)
   vcpkg                -            아래 설치 방법 참고
 
 
@@ -82,12 +82,34 @@
     .\build\Debug\PRISM_Engine.exe
 
   [조작]
+    - W, A, S, D 키: 카메라 이동
+    - 우클릭 드래그: 카메라 회전
     - ESC 키: 즉시 종료
-    - 창 닫기 버튼: 종료
 
   [결과 확인]
-    - 실행 후 약 10프레임 시점에 `build/Debug/screenshot_final.png`가 생성됨.
-    - 배경색(파랑) 위에 흰색 토끼가 보이면 정상.
+    - 정지 상태에서 노이즈가 부드럽게 사라지면 패스 트레이싱(Accumulation) 정상 작동.
+    - 배경색이 어두운 남색이고 토끼가 밝게 보이면 정상.
+
+
+--------------------------------------------------------------------------------
+  6. 셰이더 컴파일 (PRISM 전용)
+--------------------------------------------------------------------------------
+
+  GLSL(.rgen, .rchit 등) 파일을 수정한 후에는 반드시 SPIR-V(.spv)로 빌드해야 한다.
+  프로젝트 루트(PRISM_Engine/) 폴더에서 실행:
+
+  [PowerShell]
+    glslangValidator -V --target-env vulkan1.2 shaders/raygenbsdf.rgen -o shaders/raygenbsdf.rgen.spv; `
+    glslangValidator -V --target-env vulkan1.2 shaders/closesthitbsdf.rchit -o shaders/closesthitbsdf.rchit.spv; `
+    glslangValidator -V --target-env vulkan1.2 shaders/miss.rmiss -o shaders/miss.rmiss.spv
+
+  [cmd]
+    glslangValidator -V --target-env vulkan1.2 shaders/raygenbsdf.rgen -o shaders/raygenbsdf.rgen.spv && ^
+    glslangValidator -V --target-env vulkan1.2 shaders/closesthitbsdf.rchit -o shaders/closesthitbsdf.rchit.spv && ^
+    glslangValidator -V --target-env vulkan1.2 shaders/miss.rmiss -o shaders/miss.rmiss.spv
+
+  ※ 주의: 빌드된 .spv 파일은 실행 시 build/Debug/shaders/ 폴더로 복사되어야 함.
+     (CMakeLists.txt에 자동 복사 로직이 포함되어 있음)
 
 
 --------------------------------------------------------------------------------
@@ -127,6 +149,11 @@
 ================================================================================
   해결된 이슈 (팀 참고용)
 ================================================================================
+
+  ▸ 하이브리드 패스 트레이싱 (2026-03-08 업데이트)
+    - 문제: 레이 트레이싱 결과가 정지 시에도 노이즈가 심하고 카메라 이동 시 궤적이 남음.
+    - 해결: 프레임 누적(Accumulation) 로직 추가 및 이동 시 frameCount 리셋 구현.
+    - 개선: Disney BSDF 모델 적용 및 톤매핑 노출 조정으로 화질 개선.
 
   ▸ HLMS 초기화 (2026-03-02 수정)
     - 문제: 셰이더 템플릿 경로 설정 오류로 렌더링이 안 됨.
@@ -172,5 +199,6 @@
     - Media/Hlms/ (셰이더 템플릿)
     - Media/Common/ (PBS용 LTC Matrix 등)
     - bunny.obj (테스트 모델)
+    - shaders/*.spv (레이 트레이싱 바이너리)
 
 ================================================================================

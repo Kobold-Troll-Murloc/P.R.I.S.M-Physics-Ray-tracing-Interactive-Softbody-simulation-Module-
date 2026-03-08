@@ -9,7 +9,7 @@
 
 namespace Prism {
 
-    // raygenbsdf.rgen / closesthitbsdf.rchit 과 레이아웃 일치 (std140)
+    // [2_LSM 호환] raygenbsdf.rgen / closesthitbsdf.rchit 과 레이아웃 일치 (std140)
     struct GpuLight {
         float position[3];
         float intensity;
@@ -21,12 +21,10 @@ namespace Prism {
         float viewInverse[16];
         float projInverse[16];
         float cameraPos[3];
-        float pad0;             // vec3 alignment padding (offset 140)
-        int   frameCount;       // (offset 144)
-        float pad1[3];          // struct alignment padding (offset 148-159)
-        GpuLight lights[3];     // (offset 160)
-        int   lightCount;       // (offset 256)
-        float padding[3];       // (offset 260)
+        int   frameCount;       // offset 144
+        GpuLight lights[3];     // offset 160 (Light struct size is 32)
+        int   lightCount;       // offset 256
+        float padding[3];       // offset 260
     };
 
     // closesthitbsdf.rchit 에서 직접 읽는 정점 구조체 (8 floats = 32 bytes)
@@ -141,7 +139,7 @@ namespace Prism {
         VkDescriptorSet  mDescriptorSet  = VK_NULL_HANDLE;
         VkDescriptorSetLayout mDescriptorSetLayout = VK_NULL_HANDLE;
 
-        // Depth dummy (Binding 5 placeholder)
+        // Depth dummy (Binding 5)
         VkImage        mDummyDepthImage  = VK_NULL_HANDLE;
         VkDeviceMemory mDummyDepthMemory = VK_NULL_HANDLE;
         VkImageView    mDummyDepthView   = VK_NULL_HANDLE;
@@ -152,6 +150,7 @@ namespace Prism {
         VkDeviceMemory mStorageImageMemory = VK_NULL_HANDLE;
         VkImageView    mStorageImageView = VK_NULL_HANDLE;
 
+        // Accum Image (Binding 6)
         VkImage        mAccumImage = VK_NULL_HANDLE;
         VkDeviceMemory mAccumImageMemory = VK_NULL_HANDLE;
         VkImageView    mAccumImageView = VK_NULL_HANDLE;

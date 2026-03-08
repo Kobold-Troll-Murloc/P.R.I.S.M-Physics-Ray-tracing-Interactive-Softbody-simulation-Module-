@@ -196,8 +196,12 @@ public:
     void run() {
         bool bQuit = false; SDL_Event evt; Uint32 lastTime = SDL_GetTicks();
         float moveSpeed = 500.0f; float rotSpeed = 0.005f; bool bRightMouseDown = false;
+        int frameCount = 0; // [PRISM] 프레임 누적 카운터 추가
+
         while (!bQuit) {
             Uint32 now = SDL_GetTicks(); float dt = (now - lastTime) / 1000.0f; lastTime = now;
+            bool bMoved = false; // [PRISM] 이동 여부 체크
+
             while (SDL_PollEvent(&evt)) {
                 if (evt.type == SDL_QUIT || (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE)) bQuit = true;
                 if (evt.type == SDL_MOUSEBUTTONDOWN && evt.button.button == SDL_BUTTON_RIGHT) bRightMouseDown = true;
@@ -205,13 +209,24 @@ public:
                 if (evt.type == SDL_MOUSEMOTION && bRightMouseDown) {
                     mCamNode->yaw(Ogre::Radian(-evt.motion.xrel * rotSpeed), Ogre::Node::TS_PARENT);
                     mCamNode->pitch(Ogre::Radian(-evt.motion.yrel * rotSpeed), Ogre::Node::TS_LOCAL);
+                    bMoved = true;
                 }
             }
             const Uint8* ks = SDL_GetKeyboardState(NULL); Ogre::Vector3 mv = Ogre::Vector3::ZERO;
             if (ks[SDL_SCANCODE_W]) mv.z -= moveSpeed * dt; if (ks[SDL_SCANCODE_S]) mv.z += moveSpeed * dt;
             if (ks[SDL_SCANCODE_A]) mv.x -= moveSpeed * dt; if (ks[SDL_SCANCODE_D]) mv.x += moveSpeed * dt;
-            mCamNode->translate(mCamNode->getOrientation() * mv);
-            if (mRTPipeline) mRTPipeline->updateCameraUBO(mCamera->getViewMatrix(), mCamera->getProjectionMatrixWithRSDepth(), mCamNode->getPosition(), 0);
+            
+            if (mv != Ogre::Vector3::ZERO) {
+                mCamNode->translate(mCamNode->getOrientation() * mv);
+                bMoved = true;
+            }
+
+            // [PRISM] 이동 시 카운터 리셋, 정지 시 카운터 증가
+            if (bMoved) frameCount = 0;
+            else frameCount++;
+
+            if (mRTPipeline) mRTPipeline->updateCameraUBO(mCamera->getViewMatrix(), mCamera->getProjectionMatrixWithRSDepth(), mCamNode->getPosition(), frameCount);
+            
             mSceneMgr->updateSceneGraph();
             if (!mRoot->renderOneFrame()) break;
         }
