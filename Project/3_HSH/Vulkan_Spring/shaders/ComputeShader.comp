@@ -1,0 +1,95 @@
+#version 450
+
+struct ClothNode {
+    vec4 pos;
+    vec4 color;
+    vec4 prevPos;
+    vec4 normal;
+    float isFixed;
+    float _padding[3];
+};
+
+// C++에서 설정한 Descriptor Sets와 매칭
+layout(std430, binding = 0) readonly buffer InputNodes {
+    ClothNode nodesIn[];
+};
+
+layout(std430, binding = 1) writeonly buffer OutputNodes {
+    ClothNode nodesOut[];
+};
+
+// dt(타임스텝)를 받는 Push Constant
+layout(push_constant) uniform PushConstants {
+    float dt;
+    float u_Time; // 누적된 전체 시간
+};
+
+// 워크그룹 크기 설정 (16x16 그리드이므로 16x16x1 권장)
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// 시뮬레이션 상수
+const float springRestLength = 0.1;
+const float springStiffness = 2500.0;
+const float damping = 0.98;
+const vec3 gravity = vec3(0.0, -9.8, 0.0);
+const int WIDTH = 16;
+const int HEIGHT = 16;
+
+void main() {
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+
+    if (x >= WIDTH || y >= HEIGHT) return;
+
+    uint index = y * WIDTH + x;
+    ClothNode current = nodesIn[index];
+
+    // 고정된 노드는 위치 변화 없음
+    if (current.isFixed > 0.5) {
+        nodesOut[index] = current;
+        return;
+    }
+
+    vec3 pos = current.pos.xyz;
+    vec3 prevPos = current.prevPos.xyz;
+
+    vec3 force = gravity; // 중력 적용
+
+    // --- 스프링 힘 계산 (인접한 8개 노드 탐색) ---
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            if (i == 0 && j == 0) continue;
+
+            int nx = int(x) + i;
+            int ny = int(y) + j;
+
+            if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT) {
+                uint neighborIndex = uint(ny * WIDTH + nx);
+                vec3 neighborPos = nodesIn[neighborIndex].pos.xyz;
+
+                vec3 diff = pos - neighborPos;
+                float dist = length(diff);
+                
+                // 대각선인 경우 restLength 보정 (√2배)
+                float restLen = (i != 0 && j != 0) ? springRestLength * 1.414 : springRestLength;
+
+                if (dist > 0.0001) {
+                    // 훅의 법칙: F = -k * (현재거리 - 원래거리)
+                    force -= springStiffness * (dist - restLen) * (diff / dist);
+                }
+            }
+        }
+    }
+
+    // --- 베를레 적분 (Verlet Integration) ---
+    // 가속도 a = F / m (질량 m=1.0 가정)
+    vec3 acceleration = force;
+
+    // pos_new = pos + (pos - prevPos) * damping + a * dt^2
+    vec3 newPos = pos + (pos - prevPos) * damping + acceleration * dt * dt;
+
+    // 결과 저장
+    nodesOut[index] = current;
+    nodesOut[index].pos = vec4(newPos, 1.0);
+    nodesOut[index].prevPos = vec4(pos, 1.0); // 현재 위치가 다음 프레임의 이전 위치가 됨
+}
