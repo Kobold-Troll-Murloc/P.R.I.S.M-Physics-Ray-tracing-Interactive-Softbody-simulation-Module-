@@ -2,14 +2,6 @@
   "name": "prism-engine",
   "version-string": "0.1.0",
   "dependencies": [
-    {
-      "name": "ogre-next",
-      "features": [
-        "vulkan",
-        "d3d11",
-        "gl3plus"
-      ]
-    },
     "sdl2",
     "imgui",
     "spdlog"

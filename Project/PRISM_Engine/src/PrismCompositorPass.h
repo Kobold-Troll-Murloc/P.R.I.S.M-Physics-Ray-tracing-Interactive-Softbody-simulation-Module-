@@ -3,6 +3,7 @@
 #include <OgreCompositorPassProvider.h>
 #include <OgreCompositorPass.h>
 #include <OgreCompositorPassDef.h>
+#include <OgreWindow.h>
 #include "PrismRTPipeline.h"
 
 namespace Prism {
@@ -15,21 +16,25 @@ namespace Prism {
 
     class RTPass : public Ogre::CompositorPass {
     public:
-        RTPass(const Ogre::CompositorPassDef* definition, 
-               Ogre::CompositorNode* parentNode, 
-               RTPipeline* rtPipeline)
+        RTPass(const Ogre::CompositorPassDef* definition,
+               Ogre::CompositorNode* parentNode,
+               RTPipeline* rtPipeline,
+               Ogre::Window* window)
             : Ogre::CompositorPass(definition, parentNode)
-            , mRTPipeline(rtPipeline) {}
+            , mRTPipeline(rtPipeline)
+            , mWindow(window) {}
 
         virtual void execute(const Ogre::Camera* lodCamera) override;
 
     private:
-        RTPipeline* mRTPipeline;
+        RTPipeline*   mRTPipeline;
+        Ogre::Window* mWindow;
     };
 
     class RTCompositorPassProvider : public Ogre::CompositorPassProvider {
     public:
-        RTCompositorPassProvider(RTPipeline* rtPipeline) : mRTPipeline(rtPipeline) {}
+        RTCompositorPassProvider(RTPipeline* rtPipeline, Ogre::Window* window)
+            : mRTPipeline(rtPipeline), mWindow(window) {}
 
         virtual Ogre::CompositorPassDef* addPassDef(Ogre::CompositorPassType passType,
                                                   Ogre::IdString customId,
@@ -43,7 +48,8 @@ namespace Prism {
                                              Ogre::SceneManager* sceneManager) override;
 
     private:
-        RTPipeline* mRTPipeline;
+        RTPipeline*   mRTPipeline;
+        Ogre::Window* mWindow;
     };
 
 }
