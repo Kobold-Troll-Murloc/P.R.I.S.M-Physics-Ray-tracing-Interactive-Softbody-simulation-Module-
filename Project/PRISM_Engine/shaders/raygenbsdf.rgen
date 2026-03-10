@@ -195,9 +195,12 @@ void main() {
     const vec2 pixelCenter = vec2(pixelCoord) + jitter;
     const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
     vec2 d = inUV * 2.0 - 1.0;
+    // OGRE Vulkan은 내부적으로 projection Y-flip을 viewport(음수 height)로 처리.
+    // projMatrix 자체는 OpenGL NDC (Y+1=top) 기준 → RT 셰이더에서 d.y 반전 필요.
+    d.y = -d.y;
 
     // [PRISM] 배경색을 좀 더 밝고 시원한 톤으로 조정
-    vec3 skyColor = vec3(0.1, 0.1, 0.2); 
+    vec3 skyColor = vec3(0.1, 0.1, 0.2);
 
     vec4 target = ubo.projInverse * vec4(d.x, d.y, 1, 1);
     vec3 rayOrigin = (ubo.viewInverse * vec4(0,0,0,1)).xyz;

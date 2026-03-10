@@ -540,6 +540,9 @@ namespace Prism {
 
     void RTPipeline::updateCameraUBO(const Ogre::Matrix4& view, const Ogre::Matrix4& proj, const Ogre::Vector3& camPos, int frameCount) {
         if (mCameraUBOBuffer == VK_NULL_HANDLE) createDescriptorSet();
+
+        // [DEBUG] 첫 프레임에서만 proj[1][1] 부호 확인
+        // proj[1][1] < 0 → OGRE projection에 Y flip 포함 (Vulkan NDC)
         Ogre::Matrix4 vInv = view.inverse().transpose();
         Ogre::Matrix4 pInv = proj.inverse().transpose();
         CameraUBO ubo{};

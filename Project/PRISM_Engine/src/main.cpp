@@ -416,9 +416,21 @@ public:
         mRTPipeline->createDescriptorSet();
 
         // 카메라 초기 위치 (Cornell Box 앞에서 바라보기)
-        // OGRE Next 3.0: SceneNode::lookAt()은 ASSERT 위험 → Camera::lookAt() 사용
-        mCamNode->setPosition(Ogre::Vector3(0, 7, 15));
-        mCamera->lookAt(Ogre::Vector3(0, 5, 0));
+        // OGRE Next 3.0: SceneNode::lookAt() = ASSERT, Camera::lookAt() = roll 뒤집힘
+        // → 표준 lookAt 행렬로 Quaternion 직접 계산
+        {
+            Ogre::Vector3 eye(0, 7, 15), target(0, 5, 0), worldUp(0, 1, 0);
+            Ogre::Vector3 zAxis = (eye - target).normalisedCopy(); // -forward (카메라는 -Z forward)
+            Ogre::Vector3 xAxis = worldUp.crossProduct(zAxis).normalisedCopy();
+            Ogre::Vector3 yAxis = zAxis.crossProduct(xAxis);
+            Ogre::Matrix3 rotMat;
+            rotMat.SetColumn(0, xAxis);
+            rotMat.SetColumn(1, yAxis);
+            rotMat.SetColumn(2, zAxis);
+            Ogre::Quaternion q; q.FromRotationMatrix(rotMat);
+            mCamNode->setPosition(eye);
+            mCamNode->setOrientation(q);
+        }
     }
 
     void run() {
