@@ -5,6 +5,11 @@ project(PRISM_Engine CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# [PRISM] MSVC: UTF-8 source encoding (prevents Korean comment parsing corruption)
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 # SDL2 및 Vulkan 패키지 찾기
 find_package(SDL2 CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
@@ -110,4 +115,12 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/bunny.obj"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/bunny.obj"
     COMMENT "Copying bunny.obj to build directory..."
+)
+
+# Copy cube.obj
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/cube.obj"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/cube.obj"
+    COMMENT "Copying cube.obj to build directory..."
 )

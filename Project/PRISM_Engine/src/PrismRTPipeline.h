@@ -6,6 +6,9 @@
 #include <OgreVector3.h>
 #include <OgreMatrix4.h>
 #include <array>
+#include <unordered_map>
+#include <string>
+#include <vector>
 
 namespace Prism {
 
@@ -43,7 +46,7 @@ namespace Prism {
 
     // closesthitbsdf.rchit: layout(binding=3) buffer InstanceMaterials
     struct InstanceMaterial {
-        float albedo[4];    // rgb: 색상, a: 투명도
+        float albedo[4];     // rgb: 색상, a: 투명도
         float pbrParams1[4]; // x: emissive강도, y: roughness, z: metallic, w: padding
         float pbrParams2[4]; // x: specTrans, y: ior, z,w: padding
     };
@@ -55,6 +58,20 @@ namespace Prism {
         uint32_t customIndex;
     };
 
+    // 메시 하나당 BLAS + Vertex/Index 버퍼
+    struct MeshBlas {
+        VkBuffer       vertexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
+        VkBuffer       indexBuffer  = VK_NULL_HANDLE;
+        VkDeviceMemory indexMemory  = VK_NULL_HANDLE;
+        VkBuffer       blasBuffer   = VK_NULL_HANDLE;
+        VkDeviceMemory blasMemory   = VK_NULL_HANDLE;
+        VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
+        VkDeviceAddress blasAddress     = 0;
+        VkDeviceAddress vertexAddress   = 0;
+        VkDeviceAddress indexAddress    = 0;
+    };
+
     class RTPipeline {
     public:
         RTPipeline(Ogre::VulkanRenderSystem* rs);
@@ -64,7 +81,8 @@ namespace Prism {
         void cleanup();
 
         // Acceleration Structure Management
-        void buildBLAS(Ogre::MeshPtr mesh);
+        // meshKey로 캐시 확인 후 재사용, 반환값은 mMeshBLASes 인덱스
+        uint32_t buildBLAS(Ogre::MeshPtr mesh, const std::string& meshKey);
         void buildTLAS(const std::vector<RTObject>& objects);
 
         // RT Execution
@@ -75,8 +93,9 @@ namespace Prism {
         // Getters
         VkAccelerationStructureKHR getTLAS() const { return mTopLevelAS; }
         VkPipeline getPipeline() const { return mRTPipeline; }
-        VkAccelerationStructureKHR getBLAS() const { return mBLAS; }
-        VkDeviceAddress getBLASAddress() const { return mBLASAddress; }
+        VkDeviceAddress getBLASAddress(uint32_t meshIdx) const { return mMeshBLASes[meshIdx].blasAddress; }
+        VkDeviceAddress getMeshVertexAddress(uint32_t meshIdx) const { return mMeshBLASes[meshIdx].vertexAddress; }
+        VkDeviceAddress getMeshIndexAddress(uint32_t meshIdx) const { return mMeshBLASes[meshIdx].indexAddress; }
         VkDescriptorSet getDescriptorSet() const { return mDescriptorSet; }
         VkPipelineLayout getPipelineLayout() const { return mPipelineLayout; }
         VkImage getStorageImage() const { return mStorageImage; }
@@ -87,8 +106,9 @@ namespace Prism {
         void updateCameraUBO(const Ogre::Matrix4& view, const Ogre::Matrix4& proj,
                              const Ogre::Vector3& camPos, int frameCount);
 
-        // 씬 버퍼 생성 (BLAS/TLAS 이후 호출)
-        void createSceneBuffers(Ogre::MeshPtr mesh);
+        // 씬 버퍼 생성 (buildTLAS 이후 호출)
+        void createSceneBuffers(const std::vector<InstanceMaterial>& materials,
+                                const std::vector<ObjDesc>& objDescs);
 
         // Descriptor Set 구성 (createSceneBuffers 이후 호출)
         void createDescriptorSet();
@@ -102,11 +122,9 @@ namespace Prism {
         VkPipeline mRTPipeline = VK_NULL_HANDLE;
         VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
 
-        // BLAS
-        VkAccelerationStructureKHR mBLAS = VK_NULL_HANDLE;
-        VkBuffer mBLASBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory mBLASMemory = VK_NULL_HANDLE;
-        VkDeviceAddress mBLASAddress = 0;
+        // 다중 BLAS (메시 캐시)
+        std::unordered_map<std::string, uint32_t> mMeshKeyToIndex;
+        std::vector<MeshBlas> mMeshBLASes;
 
         // TLAS
         VkAccelerationStructureKHR mTopLevelAS = VK_NULL_HANDLE;
@@ -127,12 +145,6 @@ namespace Prism {
         // Material Buffer (Binding 3)
         VkBuffer       mMaterialBuffer = VK_NULL_HANDLE;
         VkDeviceMemory mMaterialMemory = VK_NULL_HANDLE;
-
-        // Vertex/Index GPU 주소 (ObjDesc용)
-        VkBuffer       mRTVertexBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory mRTVertexMemory = VK_NULL_HANDLE;
-        VkBuffer       mRTIndexBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory mRTIndexMemory = VK_NULL_HANDLE;
 
         // Descriptor
         VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;

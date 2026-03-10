@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cfloat>
 #include <sstream>
+#include <map>
+#include <unordered_map>
 
 #include <windows.h>
 
@@ -56,84 +58,255 @@ static Ogre::String GetBasePath() {
     return path.substr(0, path.find_last_of("\\/") + 1);
 }
 
+// ── OBJ 파서 ──────────────────────────────────────────────
+
 struct RawObj {
     std::vector<Ogre::Vector3> pos;
-    std::vector<uint32_t> indices;
+    std::vector<Ogre::Vector3> normals;
+    std::vector<uint32_t>      indices;
 };
 
+// "v", "v/vt", "v//vn", "v/vt/vn" 토큰 파싱 → (vi, ni) (-1이면 없음)
+static void parseFaceToken(const std::string& tok, int& vi, int& ni) {
+    vi = -1; ni = -1;
+    size_t slash1 = tok.find('/');
+    if (slash1 == std::string::npos) {
+        vi = std::stoi(tok) - 1;
+        return;
+    }
+    vi = std::stoi(tok.substr(0, slash1)) - 1;
+    size_t slash2 = tok.find('/', slash1 + 1);
+    if (slash2 == std::string::npos) {
+        // v/vt  (법선 없음)
+    } else if (slash2 == slash1 + 1) {
+        // v//vn
+        if (slash2 + 1 < tok.size())
+            ni = std::stoi(tok.substr(slash2 + 1)) - 1;
+    } else {
+        // v/vt/vn
+        ni = std::stoi(tok.substr(slash2 + 1)) - 1;
+    }
+}
+
 static RawObj ParseObj(const std::string& path) {
-    std::vector<Ogre::Vector3> v;
-    std::vector<uint32_t> ind;
+    std::vector<Ogre::Vector3> rawPos, rawNorm;
+
+    struct FaceTri { int v[3]; int vn[3]; };
+    std::vector<FaceTri> triangles;
+    bool hasNormals = false;
+
     std::ifstream file(path);
-    if (!file.is_open()) return {v, ind};
+    if (!file.is_open()) {
+        std::cerr << "[PRISM] OBJ not found: " << path << std::endl;
+        return {};
+    }
+
     std::string line;
     while (std::getline(file, line)) {
         if (line.empty()) continue;
-        std::stringstream ss(line); std::string prefix; ss >> prefix;
-        if (prefix == "v") { float x, y, z; ss >> x >> y >> z; v.push_back(Ogre::Vector3(x, y, z)); }
-        else if (prefix == "f") {
-            std::vector<uint32_t> faceIndices;
-            std::string v1; while(ss >> v1) {
-                size_t slash = v1.find('/');
-                faceIndices.push_back(std::stoi(slash == std::string::npos ? v1 : v1.substr(0, slash)) - 1);
+        std::istringstream ss(line);
+        std::string prefix; ss >> prefix;
+
+        if (prefix == "v") {
+            float x, y, z; ss >> x >> y >> z;
+            rawPos.push_back({x, y, z});
+        } else if (prefix == "vn") {
+            float x, y, z; ss >> x >> y >> z;
+            rawNorm.push_back({x, y, z});
+            hasNormals = true;
+        } else if (prefix == "f") {
+            std::vector<int> vis, vnis;
+            std::string tok;
+            while (ss >> tok) {
+                int vi = -1, ni = -1;
+                parseFaceToken(tok, vi, ni);
+                vis.push_back(vi);
+                vnis.push_back(ni);
             }
-            for(size_t i=1; i<faceIndices.size()-1; ++i) {
-                ind.push_back(faceIndices[0]); ind.push_back(faceIndices[i]); ind.push_back(faceIndices[i+1]);
+            // Fan triangulation
+            for (size_t i = 1; i + 1 < vis.size(); i++) {
+                FaceTri tri;
+                tri.v[0]  = vis[0];  tri.v[1]  = vis[i];  tri.v[2]  = vis[i+1];
+                tri.vn[0] = vnis[0]; tri.vn[1] = vnis[i]; tri.vn[2] = vnis[i+1];
+                triangles.push_back(tri);
             }
         }
     }
-    if (v.empty()) return {v, ind};
-    Ogre::Vector3 minV(FLT_MAX), maxV(-FLT_MAX);
-    for (auto& p : v) { minV.makeFloor(p); maxV.makeCeil(p); }
-    Ogre::Vector3 center = (minV + maxV) * 0.5f; for (auto& p : v) p -= center;
-    return {v, ind};
+
+    std::vector<Ogre::Vector3> finalPos, finalNorm;
+    std::vector<uint32_t>      indices;
+
+    if (hasNormals) {
+        // (v_idx, vn_idx) 쌍으로 unique vertex 관리
+        std::map<std::pair<int,int>, uint32_t> uniqueMap;
+        for (auto& tri : triangles) {
+            for (int j = 0; j < 3; j++) {
+                auto key = std::make_pair(tri.v[j], tri.vn[j]);
+                auto it = uniqueMap.find(key);
+                if (it != uniqueMap.end()) {
+                    indices.push_back(it->second);
+                } else {
+                    uint32_t idx = (uint32_t)finalPos.size();
+                    uniqueMap[key] = idx;
+                    finalPos.push_back(rawPos[tri.v[j]]);
+                    Ogre::Vector3 n = (tri.vn[j] >= 0 && tri.vn[j] < (int)rawNorm.size())
+                        ? rawNorm[tri.vn[j]] : Ogre::Vector3(0, 1, 0);
+                    finalNorm.push_back(n);
+                    indices.push_back(idx);
+                }
+            }
+        }
+    } else {
+        // 법선 없음 → 각 삼각형마다 face normal 계산 (flat shading)
+        for (auto& tri : triangles) {
+            if (tri.v[0] < 0 || tri.v[1] < 0 || tri.v[2] < 0) continue;
+            if (tri.v[0] >= (int)rawPos.size() || tri.v[1] >= (int)rawPos.size() || tri.v[2] >= (int)rawPos.size()) continue;
+            Ogre::Vector3 a = rawPos[tri.v[0]];
+            Ogre::Vector3 b = rawPos[tri.v[1]];
+            Ogre::Vector3 c = rawPos[tri.v[2]];
+            Ogre::Vector3 faceNorm = (b - a).crossProduct(c - a);
+            float len = faceNorm.length();
+            if (len > 1e-8f) faceNorm /= len;
+            else faceNorm = Ogre::Vector3(0, 1, 0);
+            for (int j = 0; j < 3; j++) {
+                indices.push_back((uint32_t)finalPos.size());
+                finalPos.push_back(rawPos[tri.v[j]]);
+                finalNorm.push_back(faceNorm);
+            }
+        }
+    }
+
+    // 중심 정규화 (바운딩박스 center를 원점으로)
+    if (!finalPos.empty()) {
+        Ogre::Vector3 minV(FLT_MAX), maxV(-FLT_MAX);
+        for (auto& p : finalPos) { minV.makeFloor(p); maxV.makeCeil(p); }
+        Ogre::Vector3 center = (minV + maxV) * 0.5f;
+        for (auto& p : finalPos) p -= center;
+    }
+
+    return { finalPos, finalNorm, indices };
 }
+
+// ── 씬 오브젝트 정의 ──────────────────────────────────────
+
+struct SceneObject {
+    std::string   modelPath;
+    Ogre::Vector3 position;
+    Ogre::Vector3 scale;
+    Ogre::Vector3 albedo;
+    float roughness = 0.5f;
+    float metallic  = 0.0f;
+    float specTrans = 0.0f;
+    float ior       = 1.5f;
+    float emissive  = 0.0f;
+};
+
+// ── OGRE 메시 헬퍼 (캐시 포함) ───────────────────────────
+
+static std::unordered_map<std::string, Ogre::MeshPtr> sMeshCache;
+static int sMeshCounter = 0;
+
+static Ogre::MeshPtr loadMeshFromObj(const std::string& objPath, Ogre::VaoManager* vaoMgr) {
+    // 캐시 확인
+    auto it = sMeshCache.find(objPath);
+    if (it != sMeshCache.end()) return it->second;
+
+    auto raw = ParseObj(objPath);
+    if (raw.pos.empty()) {
+        std::cerr << "[PRISM] Empty mesh: " << objPath << std::endl;
+        return Ogre::MeshPtr();
+    }
+
+    Ogre::VertexElement2Vec vElements;
+    vElements.push_back(Ogre::VertexElement2(Ogre::VET_FLOAT3, Ogre::VES_POSITION));
+    vElements.push_back(Ogre::VertexElement2(Ogre::VET_FLOAT3, Ogre::VES_NORMAL));
+
+    float* vData = static_cast<float*>(OGRE_MALLOC_SIMD(sizeof(float) * raw.pos.size() * 6, Ogre::MEMCATEGORY_GEOMETRY));
+    for (size_t i = 0; i < raw.pos.size(); ++i) {
+        vData[i*6+0] = raw.pos[i].x;     vData[i*6+1] = raw.pos[i].y;     vData[i*6+2] = raw.pos[i].z;
+        vData[i*6+3] = raw.normals[i].x; vData[i*6+4] = raw.normals[i].y; vData[i*6+5] = raw.normals[i].z;
+    }
+    auto vBuf = vaoMgr->createVertexBuffer(vElements, raw.pos.size(), Ogre::BT_DEFAULT, vData, true);
+
+    uint32_t* iData = static_cast<uint32_t*>(OGRE_MALLOC_SIMD(sizeof(uint32_t) * raw.indices.size(), Ogre::MEMCATEGORY_GEOMETRY));
+    memcpy(iData, raw.indices.data(), sizeof(uint32_t) * raw.indices.size());
+    auto iBuf = vaoMgr->createIndexBuffer(Ogre::IndexBufferPacked::IT_32BIT, raw.indices.size(), Ogre::BT_DEFAULT, iData, true);
+
+    Ogre::VertexBufferPackedVec vBuffers; vBuffers.push_back(vBuf);
+    auto vao = vaoMgr->createVertexArrayObject(vBuffers, iBuf, Ogre::OT_TRIANGLE_LIST);
+
+    std::string meshName = "PrismMesh_" + std::to_string(sMeshCounter++);
+    auto mesh = Ogre::MeshManager::getSingleton().createManual(meshName, "General");
+    auto sub  = mesh->createSubMesh();
+    sub->mVao[0].push_back(vao);
+    sub->mVao[1].push_back(vao);
+    mesh->_setBounds(Ogre::Aabb(Ogre::Vector3::ZERO, Ogre::Vector3(1, 1, 1)), true);
+
+    sMeshCache[objPath] = mesh;
+    std::cout << "[PRISM] Loaded mesh: " << objPath << " (" << raw.pos.size() << " verts, " << raw.indices.size()/3 << " tris)" << std::endl;
+    return mesh;
+}
+
+// ── PrismApp ─────────────────────────────────────────────
 
 class PrismApp {
 public:
-    Ogre::Root* mRoot = nullptr; Ogre::Window* mWindow = nullptr; Ogre::SceneManager* mSceneMgr = nullptr;
-    Ogre::Camera* mCamera = nullptr; Ogre::SceneNode* mCamNode = nullptr; SDL_Window* mSdlWin = nullptr;
-    Ogre::SceneNode* mBunnyNode = nullptr; Prism::RTPipeline* mRTPipeline = nullptr;
+    Ogre::Root*       mRoot     = nullptr;
+    Ogre::Window*     mWindow   = nullptr;
+    Ogre::SceneManager* mSceneMgr = nullptr;
+    Ogre::Camera*     mCamera   = nullptr;
+    Ogre::SceneNode*  mCamNode  = nullptr;
+    SDL_Window*       mSdlWin   = nullptr;
+    Prism::RTPipeline* mRTPipeline = nullptr;
     Prism::RTCompositorPassProvider* mPassProvider = nullptr;
 
     bool setup() {
+        SetUnhandledExceptionFilter(PrismCrashHandler);
+
         mRoot = new Ogre::Root(nullptr, "", "", "PRISM.log");
         mRoot->loadPlugin("RenderSystem_Vulkan_d", false, nullptr);
+
         Ogre::RenderSystem* rs = nullptr;
-        for (auto r : mRoot->getAvailableRenderers()) if (r->getName().find("Vulkan") != std::string::npos) rs = r;
+        for (auto r : mRoot->getAvailableRenderers())
+            if (r->getName().find("Vulkan") != std::string::npos) rs = r;
         if (!rs) return false;
-        mRoot->setRenderSystem(rs); mRoot->initialise(false);
-        mSdlWin = SDL_CreateWindow("PRISM", 100, 100, 1280, 720, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+
+        mRoot->setRenderSystem(rs);
+        mRoot->initialise(false);
+
+        mSdlWin = SDL_CreateWindow("PRISM - Cornell Box", 100, 100, 1280, 720, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
         SDL_SysWMinfo wm; SDL_VERSION(&wm.version); SDL_GetWindowWMInfo(mSdlWin, &wm);
-        Ogre::NameValuePairList p; p["externalWindowHandle"] = Ogre::StringConverter::toString((size_t)wm.info.win.window);
+        Ogre::NameValuePairList p;
+        p["externalWindowHandle"] = Ogre::StringConverter::toString((size_t)wm.info.win.window);
         mWindow = mRoot->createRenderWindow("PRISM", 1280, 720, false, &p);
 
         mRTPipeline = new Prism::RTPipeline(static_cast<Ogre::VulkanRenderSystem*>(rs));
         mRTPipeline->initialize();
         mPassProvider = new Prism::RTCompositorPassProvider(mRTPipeline, mWindow);
-        auto comp = mRoot->getCompositorManager2(); comp->setCompositorPassProvider(mPassProvider);
+        auto comp = mRoot->getCompositorManager2();
+        comp->setCompositorPassProvider(mPassProvider);
 
         registerHlms();
+
         mSceneMgr = mRoot->createSceneManager(Ogre::ST_GENERIC, 1u);
         mCamera = mSceneMgr->createCamera("PrismCam");
-        mCamera->setNearClipDistance(0.1f); mCamera->setFarClipDistance(10000.0f);
+        mCamera->setNearClipDistance(0.01f);
+        mCamera->setFarClipDistance(10000.0f);
+        mCamera->setAutoAspectRatio(true);
+
         mCamNode = mSceneMgr->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
         if (mCamera->getParentSceneNode()) mCamera->detachFromParent();
-        mCamNode->attachObject(mCamera); mCamNode->setPosition(0, 0, 1000); mCamera->lookAt(Ogre::Vector3::ZERO);
+        mCamNode->attachObject(mCamera);
 
-        auto light = mSceneMgr->createLight(); light->setType(Ogre::Light::LT_DIRECTIONAL);
+        // 더미 방향광 (래스터 패스용)
+        auto light = mSceneMgr->createLight();
+        light->setType(Ogre::Light::LT_DIRECTIONAL);
         auto lNode = mSceneMgr->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
         if (light->getParentSceneNode()) light->detachFromParent();
-        lNode->attachObject(light); lNode->setDirection(Ogre::Vector3(-1, -1, -1).normalisedCopy());
+        lNode->attachObject(light);
+        lNode->setDirection(Ogre::Vector3(-1, -2, -1).normalisedCopy());
 
-        createBunny();
-        if (mRTPipeline && mBunnyNode) {
-            Ogre::Item* item = static_cast<Ogre::Item*>(mBunnyNode->getAttachedObject(0));
-            mRTPipeline->buildBLAS(item->getMesh());
-            Prism::RTObject obj; obj.blasAddress = mRTPipeline->getBLASAddress();
-            obj.transform = Ogre::Matrix4::IDENTITY; obj.transform.setScale(Ogre::Vector3(1000, 1000, 1000));
-            mRTPipeline->buildTLAS({ obj }); mRTPipeline->createDescriptorSet();
-        }
+        setupScene();
 
         {
             Ogre::CompositorNodeDef* nodeDef = comp->addNodeDefinition("RTPrismNode");
@@ -142,7 +315,8 @@ public:
             Ogre::CompositorTargetDef* targetDef = nodeDef->addTargetPass("rt0");
             targetDef->setNumPasses(2);
             Ogre::CompositorPassSceneDef* sceneDef = static_cast<Ogre::CompositorPassSceneDef*>(targetDef->addPass(Ogre::PASS_SCENE));
-            sceneDef->setAllClearColours(Ogre::ColourValue(0.1f, 0.1f, 0.1f)); sceneDef->setAllLoadActions(Ogre::LoadAction::Clear);
+            sceneDef->setAllClearColours(Ogre::ColourValue(0.0f, 0.0f, 0.0f));
+            sceneDef->setAllLoadActions(Ogre::LoadAction::Clear);
             targetDef->addPass(Ogre::PASS_CUSTOM, "ray_tracing");
             comp->addWorkspaceDefinition("MainWS")->connectExternal(0, nodeDef->getName(), 0);
         }
@@ -158,8 +332,11 @@ public:
             if (type == Ogre::HLMS_PBS) Ogre::HlmsPbs::getDefaultPaths(mainPath, libPaths);
             else Ogre::HlmsUnlit::getDefaultPaths(mainPath, libPaths);
             auto archMain = archMgr.load(base + mainPath, "FileSystem", true);
-            Ogre::ArchiveVec archLibs; for (const auto& l : libPaths) archLibs.push_back(archMgr.load(base + l, "FileSystem", true));
-            auto hlms = (type == Ogre::HLMS_PBS) ? (Ogre::Hlms*)OGRE_NEW Ogre::HlmsPbs(archMain, &archLibs) : (Ogre::Hlms*)OGRE_NEW Ogre::HlmsUnlit(archMain, &archLibs);
+            Ogre::ArchiveVec archLibs;
+            for (const auto& l : libPaths) archLibs.push_back(archMgr.load(base + l, "FileSystem", true));
+            auto hlms = (type == Ogre::HLMS_PBS)
+                ? (Ogre::Hlms*)OGRE_NEW Ogre::HlmsPbs(archMain, &archLibs)
+                : (Ogre::Hlms*)OGRE_NEW Ogre::HlmsUnlit(archMain, &archLibs);
             mRoot->getHlmsManager()->registerHlms(hlms);
         };
         reg(Ogre::HLMS_UNLIT); reg(Ogre::HLMS_PBS);
@@ -167,66 +344,137 @@ public:
         Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups(true);
     }
 
-    void createBunny() {
-        std::string objPath = GetBasePath() + "bunny.obj"; auto raw = ParseObj(objPath);
-        if (raw.pos.empty()) return;
-        Ogre::VaoManager *vaoManager = mRoot->getRenderSystem()->getVaoManager();
-        Ogre::VertexElement2Vec vElements;
-        vElements.push_back(Ogre::VertexElement2(Ogre::VET_FLOAT3, Ogre::VES_POSITION));
-        vElements.push_back(Ogre::VertexElement2(Ogre::VET_FLOAT3, Ogre::VES_NORMAL));
-        float* vData = static_cast<float*>(OGRE_MALLOC_SIMD(sizeof(float) * raw.pos.size() * 6, Ogre::MEMCATEGORY_GEOMETRY));
-        for (size_t i = 0; i < raw.pos.size(); ++i) {
-            vData[i*6+0]=raw.pos[i].x; vData[i*6+1]=raw.pos[i].y; vData[i*6+2]=raw.pos[i].z; vData[i*6+3]=0; vData[i*6+4]=1; vData[i*6+5]=0;
+    void setupScene() {
+        std::string basePath = GetBasePath();
+        Ogre::VaoManager* vaoMgr = mRoot->getRenderSystem()->getVaoManager();
+
+        // Cornell Box 씬 구성 (LSM 좌표계 기준)
+        std::vector<SceneObject> scene = {
+            // modelPath                       pos               scale             albedo                   rough  metal  specTr ior  emissive
+            { basePath+"cube.obj",  {  0, -1,   0}, {20,  0.2f, 20}, {0.8f, 0.8f, 0.8f},  0.5f, 0.0f, 0.0f, 1.5f, 0.0f }, // 바닥
+            { basePath+"cube.obj",  {  0, 12,   0}, {20,  0.2f, 20}, {1.0f, 1.0f, 1.0f},  0.5f, 0.0f, 0.0f, 1.5f, 0.0f }, // 천장
+            { basePath+"cube.obj",  {  0,  6, -10}, {20, 12.0f,  0.2f},{0.9f, 0.9f, 0.9f},0.5f, 0.0f, 0.0f, 1.5f, 0.0f }, // 뒷벽
+            { basePath+"cube.obj",  {-10,  6,   0}, {0.2f,12.0f, 20}, {0.8f, 0.1f, 0.1f},  0.5f, 1.0f, 0.0f, 1.5f, 0.0f }, // 왼벽 (빨강, metallic)
+            { basePath+"cube.obj",  { 10,  6,   0}, {0.2f,12.0f, 20}, {0.1f, 0.8f, 0.1f},  0.5f, 1.0f, 0.0f, 1.5f, 0.0f }, // 오른벽 (초록, metallic)
+            { basePath+"cube.obj",  {  0, 11.5f, 0}, {8,  0.1f,  8}, {1.0f, 1.0f, 1.0f},  0.5f, 0.0f, 0.0f, 1.5f, 4.0f }, // 면광원 (emissive)
+            { basePath+"bunny.obj", {  0,  0.5f, 0}, {8,  8.0f,  8}, {0.9f, 0.9f, 0.9f},  0.1f, 0.0f, 0.0f, 1.5f, 0.0f }, // Bunny
+        };
+
+        std::vector<Prism::RTObject>         rtObjects;
+        std::vector<Prism::InstanceMaterial> materials;
+        std::vector<Prism::ObjDesc>          objDescs;
+
+        for (size_t i = 0; i < scene.size(); i++) {
+            auto& obj = scene[i];
+
+            // 메시 로드 (같은 OBJ면 OGRE 메시 재사용)
+            Ogre::MeshPtr mesh = loadMeshFromObj(obj.modelPath, vaoMgr);
+            if (!mesh) continue;
+
+            // OGRE SceneNode (래스터 패스용 - RT 결과로 덮어쓰므로 투명 처리)
+            auto item = mSceneMgr->createItem(mesh);
+            auto node = mSceneMgr->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
+            if (item->getParentSceneNode()) item->detachFromParent();
+            node->attachObject(item);
+            node->setPosition(obj.position);
+            node->setScale(obj.scale);
+
+            // BLAS 빌드 (같은 OBJ 경로면 캐시)
+            uint32_t meshIdx = mRTPipeline->buildBLAS(mesh, obj.modelPath);
+
+            // TRS Transform → Ogre::Matrix4
+            Ogre::Matrix4 transform = Ogre::Matrix4::IDENTITY;
+            transform.makeTransform(obj.position, obj.scale, Ogre::Quaternion::IDENTITY);
+
+            // RT 오브젝트
+            Prism::RTObject rtObj;
+            rtObj.blas        = VK_NULL_HANDLE; // 직접 쓰지 않음
+            rtObj.blasAddress = mRTPipeline->getBLASAddress(meshIdx);
+            rtObj.transform   = transform;
+            rtObj.customIndex = (uint32_t)i;
+            rtObjects.push_back(rtObj);
+
+            // Material
+            Prism::InstanceMaterial mat{};
+            mat.albedo[0] = obj.albedo.x; mat.albedo[1] = obj.albedo.y;
+            mat.albedo[2] = obj.albedo.z; mat.albedo[3] = 1.0f;
+            mat.pbrParams1[0] = obj.emissive;  mat.pbrParams1[1] = obj.roughness;
+            mat.pbrParams1[2] = obj.metallic;  mat.pbrParams1[3] = 0.0f;
+            mat.pbrParams2[0] = obj.specTrans; mat.pbrParams2[1] = obj.ior;
+            materials.push_back(mat);
+
+            // ObjDesc (셰이더에서 정점/인덱스 직접 접근)
+            Prism::ObjDesc desc;
+            desc.vertexAddress = mRTPipeline->getMeshVertexAddress(meshIdx);
+            desc.indexAddress  = mRTPipeline->getMeshIndexAddress(meshIdx);
+            objDescs.push_back(desc);
         }
-        auto vBuf = vaoManager->createVertexBuffer(vElements, raw.pos.size(), Ogre::BT_DEFAULT, vData, true);
-        uint32_t* iData = static_cast<uint32_t*>(OGRE_MALLOC_SIMD(sizeof(uint32_t) * raw.indices.size(), Ogre::MEMCATEGORY_GEOMETRY));
-        memcpy(iData, raw.indices.data(), sizeof(uint32_t) * raw.indices.size());
-        auto iBuf = vaoManager->createIndexBuffer(Ogre::IndexBufferPacked::IT_32BIT, raw.indices.size(), Ogre::BT_DEFAULT, iData, true);
-        Ogre::VertexBufferPackedVec vBuffers; vBuffers.push_back(vBuf);
-        auto vao = vaoManager->createVertexArrayObject(vBuffers, iBuf, Ogre::OT_TRIANGLE_LIST);
-        auto mesh = Ogre::MeshManager::getSingleton().createManual("BunnyMesh", "General");
-        auto sub = mesh->createSubMesh(); sub->mVao[0].push_back(vao); sub->mVao[1].push_back(vao);
-        mesh->_setBounds(Ogre::Aabb(Ogre::Vector3::ZERO, Ogre::Vector3(500, 500, 500)), true);
-        auto item = mSceneMgr->createItem(mesh);
-        mBunnyNode = mSceneMgr->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
-        if (item->getParentSceneNode()) item->detachFromParent();
-        mBunnyNode->attachObject(item); mBunnyNode->setScale(1000, 1000, 1000);
+
+        // TLAS, 씬 버퍼, Descriptor Set 구성
+        mRTPipeline->buildTLAS(rtObjects);
+        mRTPipeline->createSceneBuffers(materials, objDescs);
+        mRTPipeline->createDescriptorSet();
+
+        // 카메라 초기 위치 (Cornell Box 앞에서 바라보기)
+        // OGRE Next 3.0: SceneNode::lookAt()은 ASSERT 위험 → Camera::lookAt() 사용
+        mCamNode->setPosition(Ogre::Vector3(0, 7, 15));
+        mCamera->lookAt(Ogre::Vector3(0, 5, 0));
     }
 
     void run() {
-        bool bQuit = false; SDL_Event evt; Uint32 lastTime = SDL_GetTicks();
-        float moveSpeed = 500.0f; float rotSpeed = 0.005f; bool bRightMouseDown = false;
-        int frameCount = 0; // [PRISM] 프레임 누적 카운터 추가
+        bool bQuit = false;
+        SDL_Event evt;
+        Uint32 lastTime = SDL_GetTicks();
+        float moveSpeed   = 12.0f;  // Cornell Box 스케일에 맞게 조정
+        float rotSpeed    = 0.005f;
+        bool bRightMouseDown = false;
+        int frameCount = 0;
 
         while (!bQuit) {
-            Uint32 now = SDL_GetTicks(); float dt = (now - lastTime) / 1000.0f; lastTime = now;
-            bool bMoved = false; // [PRISM] 이동 여부 체크
+            Uint32 now = SDL_GetTicks();
+            float dt = (now - lastTime) / 1000.0f;
+            lastTime = now;
+            bool bMoved = false;
 
             while (SDL_PollEvent(&evt)) {
-                if (evt.type == SDL_QUIT || (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE)) bQuit = true;
-                if (evt.type == SDL_MOUSEBUTTONDOWN && evt.button.button == SDL_BUTTON_RIGHT) bRightMouseDown = true;
-                if (evt.type == SDL_MOUSEBUTTONUP && evt.button.button == SDL_BUTTON_RIGHT) bRightMouseDown = false;
+                if (evt.type == SDL_QUIT || (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE))
+                    bQuit = true;
+                if (evt.type == SDL_MOUSEBUTTONDOWN && evt.button.button == SDL_BUTTON_RIGHT)
+                    bRightMouseDown = true;
+                if (evt.type == SDL_MOUSEBUTTONUP && evt.button.button == SDL_BUTTON_RIGHT)
+                    bRightMouseDown = false;
                 if (evt.type == SDL_MOUSEMOTION && bRightMouseDown) {
                     mCamNode->yaw(Ogre::Radian(-evt.motion.xrel * rotSpeed), Ogre::Node::TS_PARENT);
                     mCamNode->pitch(Ogre::Radian(-evt.motion.yrel * rotSpeed), Ogre::Node::TS_LOCAL);
                     bMoved = true;
                 }
             }
-            const Uint8* ks = SDL_GetKeyboardState(NULL); Ogre::Vector3 mv = Ogre::Vector3::ZERO;
-            if (ks[SDL_SCANCODE_W]) mv.z -= moveSpeed * dt; if (ks[SDL_SCANCODE_S]) mv.z += moveSpeed * dt;
-            if (ks[SDL_SCANCODE_A]) mv.x -= moveSpeed * dt; if (ks[SDL_SCANCODE_D]) mv.x += moveSpeed * dt;
-            
+
+            const Uint8* ks = SDL_GetKeyboardState(NULL);
+            Ogre::Vector3 mv = Ogre::Vector3::ZERO;
+            if (ks[SDL_SCANCODE_W]) mv.z -= moveSpeed * dt;
+            if (ks[SDL_SCANCODE_S]) mv.z += moveSpeed * dt;
+            if (ks[SDL_SCANCODE_A]) mv.x -= moveSpeed * dt;
+            if (ks[SDL_SCANCODE_D]) mv.x += moveSpeed * dt;
+            if (ks[SDL_SCANCODE_Q]) mv.y -= moveSpeed * dt;
+            if (ks[SDL_SCANCODE_E]) mv.y += moveSpeed * dt;
+
             if (mv != Ogre::Vector3::ZERO) {
                 mCamNode->translate(mCamNode->getOrientation() * mv);
                 bMoved = true;
             }
 
-            // [PRISM] 이동 시 카운터 리셋, 정지 시 카운터 증가
+            // 이동 시 누적 카운터 리셋 → 노이즈 누적 재시작
             if (bMoved) frameCount = 0;
             else frameCount++;
 
-            if (mRTPipeline) mRTPipeline->updateCameraUBO(mCamera->getViewMatrix(), mCamera->getProjectionMatrixWithRSDepth(), mCamNode->getPosition(), frameCount);
-            
+            if (mRTPipeline)
+                mRTPipeline->updateCameraUBO(
+                    mCamera->getViewMatrix(),
+                    mCamera->getProjectionMatrixWithRSDepth(),
+                    mCamNode->getPosition(),
+                    frameCount);
+
             mSceneMgr->updateSceneGraph();
             if (!mRoot->renderOneFrame()) break;
         }
@@ -235,6 +483,16 @@ public:
 
 int main(int argc, char* argv[]) {
     SDL_Init(SDL_INIT_VIDEO);
-    try { PrismApp app; if (app.setup()) app.run(); } catch (Ogre::Exception& e) { std::cerr << e.getFullDescription() << std::endl; }
-    SDL_Quit(); return 0;
+    try {
+        PrismApp app;
+        if (app.setup()) app.run();
+    } catch (Ogre::Exception& e) {
+        std::cerr << "[PRISM] Ogre::Exception: " << e.getFullDescription() << std::endl;
+    } catch (std::exception& e) {
+        std::cerr << "[PRISM] std::exception: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "[PRISM] Unknown exception caught" << std::endl;
+    }
+    SDL_Quit();
+    return 0;
 }
