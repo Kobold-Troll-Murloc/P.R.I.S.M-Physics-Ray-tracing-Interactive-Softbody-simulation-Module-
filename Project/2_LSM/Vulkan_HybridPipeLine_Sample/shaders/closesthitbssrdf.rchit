@@ -134,7 +134,6 @@ void main() {
         // geomNormal = -geomNormal;
     // }
     // -----------------------------------------------------------
-
     
     // 1. 버퍼에서 독립된 데이터들을 아주 깔끔하게 꺼내옵니다!
     vec4 albedoAlpha = materials[idx].albedo;
@@ -155,10 +154,13 @@ void main() {
     // --- [추가] 페이로드에 투명도와 굴절률 전달 ---
     payload.specTrans = params2.x;
     payload.ior = params2.y > 0.0 ? params2.y : 1.5; // 방어 코드 (0.0 방지)
+    // ----------------------------------------------
+
+    // [가장 중요!] subsurface 변수를 반드시 초기화해야 사각형 노이즈가 사라집니다!
+    // C++에서 params2.z에 매터리얼의 subsurface 값을 넘겨주고 있다고 가정합니다.
     payload.subsurface = params2.z;
 
     payload.scatterDist = params2.w; // (투과 시 내부에서 이동한 거리)
-    // ----------------------------------------------
 
     float emissiveIntensity = params1.x;
     if (emissiveIntensity > 0.0) {

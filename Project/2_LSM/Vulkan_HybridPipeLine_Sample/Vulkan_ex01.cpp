@@ -122,13 +122,14 @@ struct ObjectInstance {
     glm::vec3 scale;
     glm::vec3 color;
     bool isRaster = false; // true면 래스터화로, false면 레이트레이싱으로 (혹은 둘다)
-    bool isDynamic = false; // [추가] true면 Compute Shader가 이동시킴, false면 고정
+    bool isDynamic = false; // true면 Compute Shader가 이동시킴, false면 고정
     float emissiveIntensity = 0.0f;
     float roughness = 0.5f;         // 거칠기 (0.0: 완전 매끄러움 ~ 1.0: 완전 거침)
     float metallic = 0.0f;          // 금속성 (0.0: 비금속/플라스틱 ~ 1.0: 완전 금속)
-    // --- [추가] ---
     float specTrans = 0.0f; // 투명도 (0.0: 불투명, 1.0: 유리)
-    float ior = 1.5f;       // 굴절률 (공기 1.0, 물 1.33, 유리 1.5)
+    float ior = 1.0f;       // 굴절률 (공기 1.0, 물 1.33, 유리 1.5)
+	float subSurface = 0.0f;   // 서브서피스 스캐터링 양 (0이면 없음, 양수면 있음)
+	float scatterDistance = 5.0f; // 산란 거리 (0이면 산란 없음, 양수면 산란 있음)
 };
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
@@ -733,9 +734,18 @@ private:
             false
             });
 
-		// 벽 2(시작 시 왼쪽벽) - 빨간색
         objects.push_back({
             "models/cube.obj",
+            glm::vec3(0.0f, 6.0f, 15.0f),
+            glm::vec3(0.0f),
+            glm::vec3(20.0f, 10.0f, 0.1f),
+            glm::vec3(0.9f, 0.9f, 0.9f),
+            false
+            });
+
+		// 벽 2(시작 시 왼쪽벽) - 빨간색
+        objects.push_back({
+            "models/cube_N.obj",
             glm::vec3(-10.0f, 6.0f, 0.0f),
             glm::vec3(0.0f),
             glm::vec3(0.1f, 10.0f, 20.0f),
@@ -748,7 +758,7 @@ private:
             });
 		// 벽 3(시작 시 오른쪽벽) - 초록색
         objects.push_back({
-            "models/cube.obj",
+            "models/cube_N.obj",
             glm::vec3(10.0f, 6.0f, 0.0f),
             glm::vec3(0.0f),
             glm::vec3(0.1f, 10.0f, 20.0f),
@@ -810,25 +820,100 @@ private:
             false,
             0.0f,
             0.01f,
-            0.0f,
             1.0f,
-            1.5f
+            0.0f,
+            1.5f,
+            0.0f
             });
-		// 테이블 위 큐브, 노란색
+
+        //피기뱅크 - 중간거
         objects.push_back({
-            "models/cube_N.obj",
-            glm::vec3(1.5f, 2.1f, 0.5f),
-            glm::vec3(0.0f, 45.0f, 0.0f),
-            glm::vec3(0.2f, 0.2f, 0.2f),
-            glm::vec3(1.0f, 0.8f, 0.0f),
+        "models/PiggyBank.obj",
+            glm::vec3(2.0f, 1.95f, 0.0f),
+            glm::vec3(0.0f, -30.0f, 0.0f),
+            glm::vec3(0.6f, 0.6f, 0.6f),
+            glm::vec3(1.0f, 1.0f, 1.0f),
             false,
             false,
             0.0f,
             0.05f,
-            0.0f,
             1.0f,
-            1.31f
+            1.0f,
+            1.5f
             });
+
+
+        // 1. 일반 Diffuse 버니 (단단한 세라믹/플라스틱 느낌)
+        //objects.push_back({
+        //    "models/bunny.obj",              // 1. modelPath
+        //    glm::vec3(-4.0f, 0.0f, 3.0f),    // 2. position (왼쪽 배치)
+        //    glm::vec3(0.0f, 45.0f, 0.0f),    // 3. rotation (측면 귀가 빛을 잘 받도록)
+        //    glm::vec3(5.0f, 5.0f, 5.0f),     // 4. scale
+        //    glm::vec3(0.5f, 0.0f, 0.0f),     // 5. color (Albedo: 약간의 옥색 느낌)
+        //    false,                           // 6. isRaster
+        //    false,                           // 7. isDynamic
+        //    0.0f,                            // 8. emissiveIntensity: 빛나지 않음
+        //    0.01f,                            // 9. roughness: 꽤 거친 표면 (0.3을 원하시면 0.3f로 수정!)
+        //    0.0f,                            // 10. metallic: 비금속
+        //    1.0f,                            // 11. specTrans: 유리처럼 투명하지 않음
+        //    1.1f,                            // 12. ior: 일반적인 비금속 굴절률
+        //    0.0f,                             // 13. scatterDistance: 산란 없음 (완전 불투명)
+        //    30.0f
+        //    });
+
+        //// 2. Medium BSSRDF 버니 (양초나 옥처럼 은은하게 빛을 머금는 느낌)
+        //objects.push_back({
+        //    "models/bunny.obj",              // 1. modelPath
+        //    glm::vec3(0.0f, 0.0f, 3.0f),     // 2. position (중앙 배치)
+        //    glm::vec3(0.0f, 45.0f, 0.0f),    // 3. rotation
+        //    glm::vec3(5.0f, 5.0f, 5.0f),     // 4. scale (버니 1과 크기가 다릅니다, 의도하신 거라면 유지)
+        //    glm::vec3(0.5f, 0.0f, 0.0f),     // 5. color
+        //    false,                           // 6. isRaster
+        //    false,                           // 7. isDynamic
+        //    0.0f,                            // 8. emissiveIntensity
+        //    0.8f,                            // 9. roughness: 살짝 매끈함
+        //    0.0f,                            // 10. metallic
+        //    0.0f,                            // 11. specTrans
+        //    1.5f,                            // 12. ior
+        //    0.5f                             // 13. scatterDistance: 산란 중간 강도
+        //    
+        //    });
+
+        //// 3. Full BSSRDF 버니 (우유나 얇은 살점처럼 빛이 깊게 침투하는 느낌)
+        //objects.push_back({
+        //    "models/bunny.obj",              // 1. modelPath
+        //    glm::vec3(4.0f, 0.0f, 3.0f),     // 2. position (오른쪽 배치)
+        //    glm::vec3(0.0f, 45.0f, 0.0f),    // 3. rotation
+        //    glm::vec3(5.0f, 5.0f, 5.0f),     // 4. scale
+        //    glm::vec3(0.9f, 0.9f, 0.9f),     // 5. color
+        //    false,                           // 6. isRaster
+        //    false,                           // 7. isDynamic
+        //    0.0f,                            // 8. emissiveIntensity
+        //    0.8f,                            // 9. roughness
+        //    0.0f,                            // 10. metallic
+        //    0.9f,                            // 11. specTrans
+        //    1.2f,                            // 12. ior
+        //    1.0f,                             // 13. scatterDistance: 산란 최대 강도
+        //    10.0f
+        //    });
+
+		// 테이블 위 큐브, 노란색
+        objects.push_back({
+            "models/cube_N.obj",
+            glm::vec3(1.5f, 2.1f, 0.5f),  // position
+            glm::vec3(0.0f, 45.0f, 0.0f), // rotation
+            glm::vec3(0.2f, 0.2f, 0.2f),  // scale
+            glm::vec3(1.0f, 0.8f, 0.0f),  // color (알루미늄/금 느낌의 노란색)
+            false,                        // isRaster
+            false,                        // isDynamic
+            0.0f,                         //  emissiveIntensity (반드시 0.0f)
+            0.05f,                        //  roughness (0.05면 꽤 매끄러운 표면)
+            1.0f,                         //  metallic (1.0이면 완전 금속)
+            0.0f,                         // specTrans
+            1.31f,                        // ior
+            1.0f,                          // scatterDist
+            5.0f
+                    });
 
         objects.push_back({
             "models/cube.obj",
@@ -842,10 +927,10 @@ private:
                 });
 
         // 2. 돼지 저금통 군단 생성 (예: 2,000마리)
-        //int countX = 40;
-        //int countY = 10;
-        //int countZ = 50;
-        //float spacing = 0.5f;
+        int countX = 40;
+        int countY = 10;
+        int countZ = 50;
+        float spacing = 0.5f;
 
         //for (int x = 0; x < countX; x++) {
         //    for (int y = 0; y < countY; y++) {
@@ -855,14 +940,19 @@ private:
         //                "models/PiggyBank.obj",
         //                // 공중에 띄워서 배치
         //                glm::vec3((x - countX / 2.0f) * spacing,
-        //                          10.0f + y * spacing,
+        //                          3.0f + y * spacing,
         //                          (z - countZ / 2.0f) * spacing),
         //                glm::vec3(0.0f, 0.0f, 0.0f), // 회전
         //                glm::vec3(0.1f, 0.1f, 0.1f), // 스케일
         //                // 색상을 위치에 따라 알록달록하게
         //                glm::vec3((float)x / countX, (float)y / countY, (float)z / countZ),
         //                false, // isRaster (true로 해야 Raster 파이프라인이 그림)
-        //                true  // isDynamic (true여야 Compute Shader가 움직임)
+        //                true,  // isDynamic (true여야 Compute Shader가 움직임)
+        //                0.0f,
+        //                0.01f,
+        //                0.0f,
+        //                1.0f,
+        //                1.5f
         //                });
         //        }
         //    }
@@ -1859,8 +1949,8 @@ private:
             mat.pbrParams2 = glm::vec4(
                 obj.specTrans,
                 obj.ior,
-                0.0f, // padding
-                0.0f  // padding
+				obj.subSurface, // subsurface scattering
+                obj.scatterDistance // padding
             );
             materials.push_back(mat);
         }
@@ -2437,10 +2527,10 @@ private:
     }
 
     void createRTPipeline() {
-        auto raygenCode = readFile("shaders/raygenbsdf.rgen.spv");
+        auto raygenCode = readFile("shaders/raygenbssrdf_re.rgen.spv");
         auto missCode = readFile("shaders/miss.rmiss.spv");
         auto shadowMissCode = readFile("shaders/shadow.rmiss.spv");
-        auto chitCode = readFile("shaders/closesthitbsdf.rchit.spv");
+        auto chitCode = readFile("shaders/closesthitbssrdf.rchit.spv");
 
         VkShaderModule raygenModule = createShaderModule(raygenCode);
         VkShaderModule missModule = createShaderModule(missCode);

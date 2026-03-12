@@ -33,14 +33,19 @@ layout(set = 0, binding = 2, std140) uniform UniformBufferObject {
 // 2. 페이로드 (가방) 구조체 정의
 // ============================================================================
 struct HitPayload {
-    vec3 hitPos;     // 충돌 위치
-    vec3 normal;     // 법선
-    vec3 geomNormal; // 충돌 회피용 (진짜 법선)
+    vec3 hitPos;     // 충돌한 3D 월드 좌표
+    vec3 normal;     // 표면 법선 벡터
+    vec3 geomNormal; //충돌 회피용 (진짜 법선)
     vec3 albedo;     // 기본 색상
     float roughness; // 거칠기
     float metallic;  // 금속성
-    vec3 emissive;   // 발광 색상
-    float hitT;      // 충돌 거리
+    vec3 emissive;   // 발광 색상 (전구면 색상이 있고, 아니면 0)
+    float hitT;      // 충돌 거리 (-1.0이면 하늘/허공에 맞은 것으로 규칙을 정함)
+    // --- [추가] ---
+    float specTrans; // 투명도
+    float ior;       // 굴절률
+    float subsurface; // 산란 확률
+    float scatterDist; // 산란 거리 (투과 시 광선이 내부에서 얼마나 이동했는지)
 };
 
 layout(location = 0) rayPayloadEXT HitPayload payload;
@@ -103,14 +108,6 @@ vec3 EvaluateDisneyBRDF(HitPayload p, vec3 V, vec3 L) {
 
     float NdotL = max(dot(N, L), 0.001);
     float NdotV = max(dot(N, V), 0.001);
-
-    //float NdotL_raw = dot(N, L);
-    //float NdotL = max(NdotL_raw, 0.0); // 음수 차단
-    //NdotL = mix(NdotL, NdotL_raw * 0.5 + 0.5, 0.1); // Shadow Terminator 근처 완화
-
-    //float NdotV_raw = dot(N, V);
-    //float NdotV = max(NdotV_raw, 0.0); // 음수 차단
-    //NdotV = mix(NdotV, NdotV_raw * 0.5 + 0.5, 0.1); // Shadow Terminator 근처 완화
     
     
     float NdotH = max(dot(N, H), 0.0);

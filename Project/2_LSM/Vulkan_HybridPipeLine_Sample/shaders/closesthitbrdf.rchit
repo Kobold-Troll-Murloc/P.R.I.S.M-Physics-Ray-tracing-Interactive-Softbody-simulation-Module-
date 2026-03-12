@@ -58,6 +58,11 @@ struct HitPayload {
     float metallic;  // 금속성
     vec3 emissive;   // 발광 색상 (전구면 색상이 있고, 아니면 0)
     float hitT;      // 충돌 거리 (-1.0이면 하늘/허공에 맞은 것으로 규칙을 정함)
+    // --- [추가] ---
+    float specTrans; // 투명도
+    float ior;       // 굴절률
+    float subsurface; // 산란 확률
+    float scatterDist; // 산란 거리 (투과 시 광선이 내부에서 얼마나 이동했는지)
 };
 
 layout(buffer_reference, scalar) buffer Vertices { Vertex v[]; };

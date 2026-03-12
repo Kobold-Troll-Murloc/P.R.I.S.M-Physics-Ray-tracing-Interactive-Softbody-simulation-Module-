@@ -150,6 +150,7 @@ void main() {
     // [에러 해결] pixelCoord를 한 번만 선언합니다.
     ivec2 pixelCoord = ivec2(gl_LaunchIDEXT.xy);
 
+
     // ============= ant-aliasing을 위한 픽셀 내 무작위 샘플링 (Jitter) =============
     uint seed = pixelCoord.y * gl_LaunchSizeEXT.x + pixelCoord.x + ubo.frameCount * 719393u;
     // 무조건 정중앙(0.5)을 쏘는 대신, 0.0 ~ 1.0 사이의 무작위 난수를 더해줍니다.
