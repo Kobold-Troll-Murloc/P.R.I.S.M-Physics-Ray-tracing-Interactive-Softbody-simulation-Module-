@@ -30,9 +30,19 @@ namespace Prism {
     }
 
     void RTPass::execute(const Ogre::Camera* lodCamera) {
-        if (!mRTPipeline || mRTPipeline->getPipeline() == VK_NULL_HANDLE) return;
-        if (mRTPipeline->getDescriptorSet() == VK_NULL_HANDLE) return;
-        if (!mWindow) return;
+        Ogre::LogManager::getSingleton().logMessage("[PRISM RT] execute() called");
+        if (!mRTPipeline || mRTPipeline->getPipeline() == VK_NULL_HANDLE) {
+            Ogre::LogManager::getSingleton().logMessage("[PRISM RT] SKIP: pipeline null");
+            return;
+        }
+        if (mRTPipeline->getDescriptorSet() == VK_NULL_HANDLE) {
+            Ogre::LogManager::getSingleton().logMessage("[PRISM RT] SKIP: descriptor null");
+            return;
+        }
+        if (!mWindow) {
+            Ogre::LogManager::getSingleton().logMessage("[PRISM RT] SKIP: window null");
+            return;
+        }
 
         Ogre::VulkanRenderSystem* rs = static_cast<Ogre::VulkanRenderSystem*>(
             Ogre::Root::getSingleton().getRenderSystem());
@@ -44,9 +54,10 @@ namespace Prism {
 
         VkCommandBuffer cmdBuf = device->mGraphicsQueue.getCurrentCmdBuffer();
         if (cmdBuf == VK_NULL_HANDLE) {
-            Ogre::LogManager::getSingleton().logMessage("PRISM RT: cmdBuf is NULL, skipping");
+            Ogre::LogManager::getSingleton().logMessage("[PRISM RT] cmdBuf is NULL, skipping");
             return;
         }
+        Ogre::LogManager::getSingleton().logMessage("[PRISM RT] tracing rays...");
 
         uint32_t width  = mRTPipeline->getRTWidth();
         uint32_t height = mRTPipeline->getRTHeight();

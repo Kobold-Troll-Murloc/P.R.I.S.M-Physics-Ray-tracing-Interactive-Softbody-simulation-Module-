@@ -32,6 +32,8 @@
 #include <Compositor/OgreCompositorNodeDef.h>
 #include <Compositor/OgreCompositorWorkspaceDef.h>
 #include <Compositor/Pass/PassScene/OgreCompositorPassSceneDef.h>
+#include <Compositor/OgreTextureDefinition.h>
+#include <OgreDepthBuffer.h>
 #include <OgreImage2.h>
 #include <OgreManualObject2.h>
 #include <OgreHlmsUnlit.h>
@@ -311,14 +313,74 @@ public:
 
         {
             Ogre::CompositorNodeDef* nodeDef = comp->addNodeDefinition("RTPrismNode");
+
+            // 외부 입력 (SwapChain)
             nodeDef->addTextureSourceName("rt0", 0, Ogre::TextureDefinitionBase::TEXTURE_INPUT);
-            nodeDef->setNumTargetPass(1);
-            Ogre::CompositorTargetDef* targetDef = nodeDef->addTargetPass("rt0");
-            targetDef->setNumPasses(2);
-            Ogre::CompositorPassSceneDef* sceneDef = static_cast<Ogre::CompositorPassSceneDef*>(targetDef->addPass(Ogre::PASS_SCENE));
-            sceneDef->setAllClearColours(Ogre::ColourValue(0.0f, 0.0f, 0.0f));
-            sceneDef->setAllLoadActions(Ogre::LoadAction::Clear);
-            targetDef->addPass(Ogre::PASS_CUSTOM, "ray_tracing");
+
+            // ── G-Buffer 텍스처 정의 ──────────────────────────────
+            {
+                auto* t = nodeDef->addTextureDefinition("gbuffer_albedo");
+                t->format = Ogre::PFG_RGBA8_UNORM;
+                // 나머지 필드는 TextureDefinition 기본값 사용:
+                // width=0, height=0 (화면 크기 자동), depthOrSlices=1,
+                // numMipmaps=1, widthFactor=1, heightFactor=1,
+                // textureFlags=RenderToTexture|DiscardableContent, depthBufferId=1
+            }
+            {
+                auto* t = nodeDef->addTextureDefinition("gbuffer_normal");
+                t->format = Ogre::PFG_RGBA16_FLOAT;
+            }
+            {
+                auto* t = nodeDef->addTextureDefinition("gbuffer_material");
+                t->format = Ogre::PFG_RGBA8_UNORM;
+            }
+
+            // ── MRT 뷰 정의 ───────────────────────────────────────
+            {
+                Ogre::RenderTargetViewDef* rtv = nodeDef->addRenderTextureView("mrtGBuffer");
+                // colourAttachments: 3개 텍스처 연결
+                Ogre::RenderTargetViewEntry e;
+                e.textureName = "gbuffer_albedo";
+                rtv->colourAttachments.push_back(e);
+                e.textureName = "gbuffer_normal";
+                rtv->colourAttachments.push_back(e);
+                e.textureName = "gbuffer_material";
+                rtv->colourAttachments.push_back(e);
+                // depthBufferId=1 (기본값, 공유 depth pool 자동 연결)
+            }
+
+            // ── 패스 구성 ─────────────────────────────────────────
+            // 타겟 패스 2개:
+            //   [1] mrtGBuffer → PASS_SCENE (G-Buffer 생성)
+            //   [2] rt0        → PASS_SCENE (SwapChain 상태 정상화) + PASS_CUSTOM (RT)
+            nodeDef->setNumTargetPass(2);
+
+            // [Pass 1] G-Buffer 생성
+            {
+                Ogre::CompositorTargetDef* gbuf = nodeDef->addTargetPass("mrtGBuffer");
+                gbuf->setNumPasses(1);
+                auto* sd = static_cast<Ogre::CompositorPassSceneDef*>(
+                    gbuf->addPass(Ogre::PASS_SCENE));
+                sd->setAllClearColours(Ogre::ColourValue(0.0f, 0.0f, 0.0f, 0.0f));
+                sd->setAllLoadActions(Ogre::LoadAction::Clear);
+            }
+
+            // [Pass 2] SwapChain 상태 정상화 + RT 패스
+            {
+                Ogre::CompositorTargetDef* rt = nodeDef->addTargetPass("rt0");
+                rt->setNumPasses(2);
+
+                // PASS_SCENE: SwapChain RenderPass를 열어서 OGRE 내부 상태 정상화
+                // (RT blit이 정상적으로 동작하도록, 결과는 RT로 덮어씀)
+                auto* sd = static_cast<Ogre::CompositorPassSceneDef*>(
+                    rt->addPass(Ogre::PASS_SCENE));
+                sd->setAllClearColours(Ogre::ColourValue(0.0f, 0.0f, 0.0f));
+                sd->setAllLoadActions(Ogre::LoadAction::Clear);
+
+                // PASS_CUSTOM: endAllEncoders() 후 RT 실행 → blit
+                rt->addPass(Ogre::PASS_CUSTOM, "ray_tracing");
+            }
+
             comp->addWorkspaceDefinition("MainWS")->connectExternal(0, nodeDef->getName(), 0);
         }
         comp->addWorkspace(mSceneMgr, mWindow->getTexture(), mCamera, "MainWS", true);
