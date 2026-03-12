@@ -199,6 +199,7 @@ struct SceneObject {
     float specTrans = 0.0f;
     float ior       = 1.5f;
     float emissive  = 0.0f;
+    bool  isRaster  = false; // true → RT 셰이더에서 래스터 스타일 Lambert 셰이딩 사용 (하이브리드 데모)
 };
 
 // ── OGRE 메시 헬퍼 (캐시 포함) ───────────────────────────
@@ -348,16 +349,45 @@ public:
         std::string basePath = GetBasePath();
         Ogre::VaoManager* vaoMgr = mRoot->getRenderSystem()->getVaoManager();
 
-        // Cornell Box 씬 구성 (LSM 좌표계 기준)
+        // ──────────────────────────────────────────────────────────────────
+        // Cornell Box + 다양한 매질 박스 씬
+        //
+        // 좌표 기준:
+        //   cube.obj 단위 큐브: [-0.5, +0.5] 범위, 중심 원점
+        //   바닥 상단 y = -1 + 0.1 = -0.9
+        //   박스 하단을 바닥에 맞추려면: center_y = -0.9 + scale_y / 2
+        //
+        // 박스 매질 목록:
+        //   왼쪽 tall  : 맑은 유리 (Clear Glass)     specTrans=1.0, IOR=1.52, rough=0.0
+        //   오른쪽 tall: 완전 거울 (Perfect Mirror)   metallic=1.0, rough=0.02
+        //   중앙       : 토끼 받침대 (Diffuse White)
+        //   왼앞 small : 황금 거친 금속 (Rough Gold)  metallic=1.0, rough=0.4
+        //   오른앞 small: 서리 유리 (Frosted Glass)   specTrans=0.9, rough=0.3
+        // ──────────────────────────────────────────────────────────────────
         std::vector<SceneObject> scene = {
-            // modelPath                       pos               scale             albedo                   rough  metal  specTr ior  emissive
-            { basePath+"cube.obj",  {  0, -1,   0}, {20,  0.2f, 20}, {0.8f, 0.8f, 0.8f},  0.5f, 0.0f, 0.0f, 1.5f, 0.0f }, // 바닥
-            { basePath+"cube.obj",  {  0, 12,   0}, {20,  0.2f, 20}, {1.0f, 1.0f, 1.0f},  0.5f, 0.0f, 0.0f, 1.5f, 0.0f }, // 천장
-            { basePath+"cube.obj",  {  0,  6, -10}, {20, 12.0f,  0.2f},{0.9f, 0.9f, 0.9f},0.5f, 0.0f, 0.0f, 1.5f, 0.0f }, // 뒷벽
-            { basePath+"cube.obj",  {-10,  6,   0}, {0.2f,12.0f, 20}, {0.8f, 0.1f, 0.1f},  0.5f, 1.0f, 0.0f, 1.5f, 0.0f }, // 왼벽 (빨강, metallic)
-            { basePath+"cube.obj",  { 10,  6,   0}, {0.2f,12.0f, 20}, {0.1f, 0.8f, 0.1f},  0.5f, 1.0f, 0.0f, 1.5f, 0.0f }, // 오른벽 (초록, metallic)
-            { basePath+"cube.obj",  {  0, 11.5f, 0}, {8,  0.1f,  8}, {1.0f, 1.0f, 1.0f},  0.5f, 0.0f, 0.0f, 1.5f, 4.0f }, // 면광원 (emissive)
-            { basePath+"bunny.obj", {  0,  0.5f, 0}, {8,  8.0f,  8}, {0.9f, 0.9f, 0.9f},  0.1f, 0.0f, 0.0f, 1.5f, 0.0f }, // Bunny
+            // modelPath              pos                      scale               albedo                   rough  metal  specTr  ior   emit
+            // ── 방 구조 ──────────────────────────────────────────────────────────────────────────
+            // 바닥 top=−0.9 / 천장 bottom=11.9 → 벽은 y=−1.1~12.1 범위로 만들어 틈 제거
+            { basePath+"cube.obj", {  0,  -1,    0}, {20,    0.2f,  20  }, {0.8f, 0.8f, 0.8f}, 0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 바닥
+            { basePath+"cube.obj", {  0,  12,    0}, {20,    0.2f,  20  }, {1.0f, 1.0f, 1.0f}, 0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 천장
+            { basePath+"cube.obj", {  0,   5.5f,-10}, {20.4f,13.2f,  0.2f},{0.9f, 0.9f, 0.9f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 뒷벽  (center_y=5.5, h=13.2 → y∈[−1.1,12.1])
+            { basePath+"cube.obj", {-10,   5.5f,  0}, {0.2f, 13.2f, 20.4f},{0.8f, 0.1f, 0.1f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 왼벽  (빨강)
+            { basePath+"cube.obj", { 10,   5.5f,  0}, {0.2f, 13.2f, 20.4f},{0.1f, 0.8f, 0.1f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 오른벽 (초록)
+            { basePath+"cube.obj", {  0,  11.5f,  0}, {8,    0.1f,   8  }, {1.0f, 1.0f, 1.0f}, 0.5f, 0.0f, 0.0f, 1.5f, 4.0f }, // 면광원 (emissive)
+            // ── 오브젝트 박스들 ─────────────────────────────────────────────────────────────────
+            // 왼쪽 tall — 맑은 유리 (center_y = −0.9 + 6/2 = 2.1)
+            { basePath+"cube.obj", {-4.5f, 2.1f,  -6}, {3.5f, 6.0f, 3.5f}, {0.95f,0.97f,1.0f}, 0.0f, 0.0f, 1.0f,1.52f, 0.0f },
+            // 오른쪽 tall — 완전 거울 (metallic=1, rough≈0)
+            { basePath+"cube.obj", { 4.5f, 2.1f,  -6}, {3.5f, 6.0f, 3.5f}, {0.9f, 0.9f, 0.9f}, 0.02f,1.0f, 0.0f, 1.5f, 0.0f },
+            // 중앙 — 토끼 받침대 (center_y = −0.9+1 = 0.1, top=1.1)
+            { basePath+"cube.obj", {  0,   0.1f,  -5}, {3.0f, 2.0f, 3.0f}, {0.9f, 0.9f, 0.9f}, 0.8f, 0.0f, 0.0f, 1.5f, 0.0f },
+            // 왼쪽 앞 — 황금 거친 금속 [RASTER] isRaster=true: Lambert 셰이딩으로 표시
+            { basePath+"cube.obj", { -6,  -0.15f,-2.5f},{2.0f, 1.5f, 2.0f},{1.0f,0.77f,0.34f}, 0.4f, 1.0f, 0.0f, 1.5f, 0.0f, true },
+            // 오른쪽 앞 — 서리 유리 (Frosted Glass, specTrans=0.9, rough=0.3)
+            { basePath+"cube.obj", {  6,  -0.15f,-2.5f},{2.0f, 1.5f, 2.0f},{0.9f, 0.9f, 1.0f}, 0.3f, 0.0f, 0.9f, 1.5f, 0.0f },
+            // ── 토끼 (받침대 위) ───────────────────────────────────────────────────────────────
+            // 받침대 top=1.1, bunny Y반높이(scale=8)≈0.62 → center_y≈1.72
+            { basePath+"bunny.obj",{  0,   1.7f,  -5}, {8.0f, 8.0f, 8.0f}, {0.9f, 0.9f, 0.9f}, 0.1f, 0.0f, 0.0f, 1.5f, 0.0f },
         };
 
         std::vector<Prism::RTObject>         rtObjects;
@@ -401,6 +431,7 @@ public:
             mat.pbrParams1[0] = obj.emissive;  mat.pbrParams1[1] = obj.roughness;
             mat.pbrParams1[2] = obj.metallic;  mat.pbrParams1[3] = 0.0f;
             mat.pbrParams2[0] = obj.specTrans; mat.pbrParams2[1] = obj.ior;
+            mat.pbrParams2[2] = obj.isRaster ? 1.0f : 0.0f; // 하이브리드: 1.0 → RT에서 래스터 Lambert 셰이딩
             materials.push_back(mat);
 
             // ObjDesc (셰이더에서 정점/인덱스 직접 접근)

@@ -97,15 +97,37 @@ void main() {
     vec3 worldGeomNormal = normalize(vec3(geomNormal * gl_WorldToObjectEXT));
 
     InstanceMaterial mat = materials[idx];
-    
-    payload.hitPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-    payload.normal = worldNormal;
-    payload.geomNormal = worldGeomNormal;
-    payload.hitT = gl_HitTEXT; 
-    payload.albedo = mat.albedo.rgb;
+
+    payload.hitPos    = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+    payload.normal    = worldNormal;
+    payload.geomNormal= worldGeomNormal;
+    payload.hitT      = gl_HitTEXT;
+
+    // ── [HYBRID] pbrParams2.z == 1.0 → 래스터라이제이션 셰이딩 (Lambert + ambient) ──
+    // 이 박스는 RT BSDF가 아닌 간단한 직접광 셰이딩으로 처리.
+    // 결과를 emissive로 넘겨 raygen이 즉시 픽셀 색으로 채택하게 함 (bounce 없음).
+    if (mat.pbrParams2.z > 0.5) {
+        vec3  baseColor = mat.albedo.rgb;
+        // 면광원 중심에서 직접광 (Lambert diffuse)
+        vec3  lightPos  = vec3(0.0, 11.0, 0.0);
+        vec3  toLight   = normalize(lightPos - payload.hitPos);
+        float NdotL     = max(dot(worldNormal, toLight), 0.0);
+        vec3  ambient   = baseColor * 0.08;
+        vec3  diffuse   = baseColor * NdotL * 2.5;
+        payload.emissive  = ambient + diffuse;
+        payload.albedo    = vec3(0.0);
+        payload.roughness = 0.0;
+        payload.metallic  = 0.0;
+        payload.specTrans = 0.0;
+        payload.ior       = 1.5;
+        return;
+    }
+    // ────────────────────────────────────────────────────────────────────────────────
+
+    payload.albedo    = mat.albedo.rgb;
     payload.roughness = mat.pbrParams1.y;
-    payload.metallic = mat.pbrParams1.z;
-    payload.emissive = mat.albedo.rgb * mat.pbrParams1.x;
+    payload.metallic  = mat.pbrParams1.z;
+    payload.emissive  = mat.albedo.rgb * mat.pbrParams1.x;
     payload.specTrans = mat.pbrParams2.x;
-    payload.ior = mat.pbrParams2.y > 0.0 ? mat.pbrParams2.y : 1.5;
+    payload.ior       = mat.pbrParams2.y > 0.0 ? mat.pbrParams2.y : 1.5;
 }
