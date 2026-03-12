@@ -1,93 +1,204 @@
+================================================================================
+  PRISM Engine - 빌드 가이드 (팀 공유용)
+  대상: 1_JGN, 2_LSM, 3_HSH
+  최근 업데이트: 2026-03-08
+================================================================================
 
-vcpkg 설치를 위한
+--------------------------------------------------------------------------------
+  전제 조건
+--------------------------------------------------------------------------------
 
-cd D:\Git
-git clone https://github.com/microsoft/vcpkg.git
+  다음 도구가 설치되어 있어야 한다.
 
-cd vcpkg
-.\bootstrap-vcpkg.bat
-
-설치가 끝났다면, 시스템이 vcpkg의 위치를 알 수 있도록 환경 변수를 등록해야한다.
-Windows 검색창에 '시스템 환경 변수 편집' 검색 및 실행
-[환경 변수] 버튼 클릭 -> '사용자 변수' 쪽에 [새로 만들기] 클릭
-
-변수 이름: VCPKG_ROOT
-변수 값: vcpkg를 설치한 전체 경로 (예: D:\Git\vcpkg)
-컴퓨터 종료 후 재시작
-
-
-git clone <우리_프로젝트_Git_주소>
-cd PRISM_Engine
-
-
-# 1. CMake 구성 (Ogre Next, SDL2 다운로드 및 빌드)
-(절대)
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="D:/Git/vcpkg/scripts/buildsystems/vcpkg.cmake"
-
-(환경변수 기반 상대경로)
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-(Mac/Linux 사용자는 $env:VCPKG_ROOT 대신 $VCPKG_ROOT를 사용.)
-
-# 2. PRISM 엔진 프로젝트 빌드
-cmake --build build
+  도구                  버전          비고
+  ──────────────────────────────────────────────────────
+  Visual Studio 2022   17.x 이상    [C++ 데스크톱 개발] 워크로드 필수
+  CMake                3.20 이상    https://cmake.org/download/
+  Git                  최신
+  Vulkan SDK           1.3 이상     https://vulkan.lunarg.com/ (glslangValidator 필수)
+  vcpkg                -            아래 설치 방법 참고
 
 
-.\build\Debug\PRISM_Engine.exe
+--------------------------------------------------------------------------------
+  1. vcpkg 설치 (최초 1회)
+--------------------------------------------------------------------------------
+
+  cmd 또는 PowerShell에서:
+
+    cd D:\Git
+    git clone https://github.com/microsoft/vcpkg.git
+    cd vcpkg
+    .\bootstrap-vcpkg.bat
+
+  설치 후 환경 변수 등록:
+    Windows 검색창 → '시스템 환경 변수 편집' 실행
+    [환경 변수] → 사용자 변수 → [새로 만들기]
+
+      변수 이름: VCPKG_ROOT
+      변수 값:   D:\Git\vcpkg    (← vcpkg 설치 경로로 맞게 수정)
+
+  ※ 등록 후 PC 재시작 필수
 
 
+--------------------------------------------------------------------------------
+  2. 프로젝트 클론
+--------------------------------------------------------------------------------
 
-(설정을 변경하면)
-Remove-Item -Recurse -Force build
-로 빌드 날리고 시작
-
-----------------------------------------------------------------------------------------
-CMAKE 찾는 과정..
-cmake_minimum_required(VERSION 3.20)
-project(PRISIM_Engine CXX)
-
-# C++ 17 표준 사용
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# 1. 패키지 이름을 OgreNext가 아닌 OGRE로 찾기
-find_package(OGRE CONFIG REQUIRED COMPONENTS Main HlmsPbs HlmsUnlit)
-find_package(SDL2 CONFIG REQUIRED)
-
-# 실행 파일 타겟 생성
-add_executable(${PROJECT_NAME} src/main.cpp)
-
-# 2. 링크할 타겟 이름도 맞게 변경
-target_link_libraries(${PROJECT_NAME} PRIVATE 
-    OgreMain
-    OgreHlmsPbs
-    OgreHlmsUnlit
-    $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
-    SDL2::SDL2
-)
-----
+    git clone <우리_프로젝트_Git_주소>
+    cd P.R.I.S.M/Project/PRISM_Engine
 
 
+--------------------------------------------------------------------------------
+  3. CMake 구성 (최초 1회 또는 빌드 리셋 후)
+--------------------------------------------------------------------------------
+
+  vcpkg.json에 명시된 의존성을 자동 다운로드, 빌드.
+  ※ ogre-next 첫 빌드는 30분 이상 소요될 수 있음.
+
+  [PowerShell]
+    cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Debug
+
+  [cmd]
+    cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Debug
 
 
-cmake_minimum_required(VERSION 3.20)
-project(PRISIM_Engine CXX)
+--------------------------------------------------------------------------------
+  4. 빌드 (코드 수정 후 매번 실행)
+--------------------------------------------------------------------------------
 
-# C++ 17 표준 사용
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  ※ 주의: 실행 중인 엔진이 있다면 반드시 종료 후 빌드해야 한다 (LNK1168 방지).
 
-# 이제 설치가 완료되었으므로 정상적으로 패키지를 찾기
-find_package(OgreNext CONFIG REQUIRED COMPONENTS Main HlmsPbs HlmsUnlit)
-find_package(SDL2 CONFIG REQUIRED)
+  [PowerShell]
+    cmake --build build --config Debug --target PRISM_Engine
 
-# 실행 파일 생성
-add_executable(${PROJECT_NAME} src/main.cpp)
+  또는 Visual Studio에서 build/PRISM_Engine.sln 열기 → Debug x64 → 빌드
 
-# 타겟 링크 (OgreNext:: 네임스페이스 사용)
-target_link_libraries(${PROJECT_NAME} PRIVATE 
-    OgreNext::Main
-    OgreNext::HlmsPbs
-    OgreNext::HlmsUnlit
-    $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
-    SDL2::SDL2
-)
+
+--------------------------------------------------------------------------------
+  5. 실행 및 확인
+--------------------------------------------------------------------------------
+
+  [실행]
+    .\build\Debug\PRISM_Engine.exe
+
+  [조작]
+    - W, A, S, D 키: 카메라 이동
+    - 우클릭 드래그: 카메라 회전
+    - ESC 키: 즉시 종료
+
+  [결과 확인]
+    - 정지 상태에서 노이즈가 부드럽게 사라지면 패스 트레이싱(Accumulation) 정상 작동.
+    - 배경색이 어두운 남색이고 토끼가 밝게 보이면 정상.
+
+
+--------------------------------------------------------------------------------
+  6. 셰이더 컴파일 (PRISM 전용)
+--------------------------------------------------------------------------------
+
+  GLSL(.rgen, .rchit 등) 파일을 수정한 후에는 반드시 SPIR-V(.spv)로 빌드해야 한다.
+  프로젝트 루트(PRISM_Engine/) 폴더에서 실행:
+
+  [PowerShell]
+    glslangValidator -V --target-env vulkan1.2 shaders/raygenbsdf.rgen -o shaders/raygenbsdf.rgen.spv; `
+    glslangValidator -V --target-env vulkan1.2 shaders/closesthitbsdf.rchit -o shaders/closesthitbsdf.rchit.spv; `
+    glslangValidator -V --target-env vulkan1.2 shaders/miss.rmiss -o shaders/miss.rmiss.spv
+
+  [cmd]
+    glslangValidator -V --target-env vulkan1.2 shaders/raygenbsdf.rgen -o shaders/raygenbsdf.rgen.spv && ^
+    glslangValidator -V --target-env vulkan1.2 shaders/closesthitbsdf.rchit -o shaders/closesthitbsdf.rchit.spv && ^
+    glslangValidator -V --target-env vulkan1.2 shaders/miss.rmiss -o shaders/miss.rmiss.spv
+
+  ※ 주의: 빌드된 .spv 파일은 실행 시 build/Debug/shaders/ 폴더로 복사되어야 함.
+     (CMakeLists.txt에 자동 복사 로직이 포함되어 있음)
+
+
+--------------------------------------------------------------------------------
+  원클릭 빌드 및 실행 (추천)
+--------------------------------------------------------------------------------
+
+  실행 중인 엔진을 끄고, 빌드 후 즉시 실행하는 한 줄 명령어 (PowerShell 전용):
+
+    taskkill /F /IM PRISM_Engine.exe; cmake --build build --config Debug --target PRISM_Engine; if ($?) { .\build\Debug\PRISM_Engine.exe }
+
+
+--------------------------------------------------------------------------------
+  의존성 목록 (vcpkg.json)
+--------------------------------------------------------------------------------
+
+  패키지        기능 플래그                 용도
+  ──────────────────────────────────────────────────────
+  ogre-next    vulkan, d3d11, gl3plus     메인 렌더러
+  sdl2         -                          창 생성 및 입력 처리
+  imgui        -                          (향후) 디버그 UI
+  spdlog       -                          (향후) 로깅
+
+
+--------------------------------------------------------------------------------
+  빌드 리셋 (설정 변경 시)
+--------------------------------------------------------------------------------
+
+  [PowerShell]
+    Remove-Item -Recurse -Force build
+
+  [cmd]
+    rmdir /s /q build
+
+  이후 3단계(CMake 구성)부터 재실행
+
+
+================================================================================
+  해결된 이슈 (팀 참고용)
+================================================================================
+
+  ▸ 하이브리드 패스 트레이싱 (2026-03-08 업데이트)
+    - 문제: 레이 트레이싱 결과가 정지 시에도 노이즈가 심하고 카메라 이동 시 궤적이 남음.
+    - 해결: 프레임 누적(Accumulation) 로직 추가 및 이동 시 frameCount 리셋 구현.
+    - 개선: Disney BSDF 모델 적용 및 톤매핑 노출 조정으로 화질 개선.
+
+  ▸ HLMS 초기화 (2026-03-02 수정)
+    - 문제: 셰이더 템플릿 경로 설정 오류로 렌더링이 안 됨.
+    - 해결: Ogre 표준 `getDefaultPaths`를 사용하여 Main/Library Archive를 정확히 분리 등록.
+
+  ▸ 모델 가시성 및 원점 (2026-03-02 수정)
+    - 문제: `bunny.obj`가 너무 작고 원점에서 벗어나 있어 화면에 안 보임.
+    - 해결: 로딩 시 모델 중심을 (0,0,0)으로 정렬하고, 스케일을 500배로 키움.
+
+  ▸ 카메라 중복 부착
+    - 문제: `createCamera` 시 자동 생성된 노드와 수동 노드 간 충돌로 크래시 발생.
+    - 해결: 부착 전 `if (cam->isAttached()) cam->detachFromParent();` 로직 추가.
+
+  ▸ 렌더러 우선순위
+    - Windows 환경의 안정성을 위해 `Direct3D11`을 우선 선택하도록 로직 조정됨 (main.cpp).
+    - Vulkan 사용 시에는 드라이버 및 셰이더 컴파일 환경 확인 필요.
+
+  ▸ bunny.obj 및 리소스 경로
+    - 이제 하드코딩이 아닌 실행 파일 기준 상대 경로로 로드됨.
+    - CMake POST_BUILD가 `bunny.obj`와 HLMS 셰이더를 자동으로 복사함.
+
+  ▸ loadPlugin 시그니처
+    잘못된 예: root->loadPlugin("RenderSystem_Vulkan_d");
+    올바른 예: root->loadPlugin("RenderSystem_Vulkan_d", false, nullptr); (3인수 필수)
+
+
+================================================================================
+  CMakeLists.txt 구조 요약 (참고용)
+================================================================================
+
+  cmake_minimum_required(VERSION 3.20)
+
+  find_package(OGRE REQUIRED COMPONENTS Main HlmsPbs HlmsUnlit)
+  find_package(SDL2 CONFIG REQUIRED)
+
+  target_link_libraries(... ${OGRE_LIBRARIES}
+                            ${OGRE_HlmsPbs_LIBRARY}
+                            ${OGRE_HlmsUnlit_LIBRARY}
+                            SDL2::SDL2 ...)
+
+  POST_BUILD (자동 복사 항목):
+    - 각종 RenderSystem DLL 및 vulkan-1.dll
+    - Media/Hlms/ (셰이더 템플릿)
+    - Media/Common/ (PBS용 LTC Matrix 등)
+    - bunny.obj (테스트 모델)
+    - shaders/*.spv (레이 트레이싱 바이너리)
+
+================================================================================

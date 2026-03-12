@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(powershell:*)",
+      "WebFetch(domain:ogrecave.github.io)",
+      "Bash(head:*)"
+    ]
+  }
+}

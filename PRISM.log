@@ -1,0 +1,486 @@
+20:09:37: Creating resource group General
+20:09:37: Creating resource group Internal
+20:09:37: Creating resource group Autodetect
+20:09:37: SceneManagerFactory for type 'DefaultSceneManager' registered.
+20:09:37: Registering ResourceManager for type Material
+20:09:37: Registering ResourceManager for type Mesh
+20:09:37: Registering ResourceManager for type Mesh2
+20:09:37: Registering ResourceManager for type OldSkeleton
+20:09:37: MovableObjectFactory for type 'ParticleSystem' registered.
+20:09:37: ArchiveFactory for archive type FileSystem registered.
+20:09:37: ArchiveFactory for archive type Zip registered.
+20:09:37: ArchiveFactory for archive type EmbeddedZip registered.
+20:09:37: DDS codec registering
+20:09:37: FreeImage version: 3.18.0
+20:09:37: This program uses FreeImage, a free, open source image library supporting all common bitmap formats. See http://freeimage.sourceforge.net for details
+20:09:37: Supported formats: bmp,ico,jpg,jif,jpeg,jpe,jng,koa,iff,lbm,mng,pbm,pbm,pcd,pcx,pgm,pgm,png,ppm,ppm,ras,tga,targa,tif,tiff,wap,wbmp,wbm,psd,psb,cut,xbm,xpm,gif,hdr,sgi,rgb,rgba,bw,exr,j2k,j2c,jp2,pfm,pct,pict,pic,3fr,arw,bay,bmq,cap,cine,cr2,crw,cs1,dc2,dcr,drf,dsc,dng,erf,fff,ia,iiq,k25,kc2,kdc,mdc,mef,mos,mrw,nef,nrw,orf,pef,ptx,pxn,qtk,raf,raw,rdc,rw2,rwl,rwz,sr2,srf,srw,sti,x3f,webp,jxr,wdp,hdp
+20:09:37: ETC codec registering
+20:09:37: OITD codec registering
+20:09:37: Registering ResourceManager for type HighLevelGpuProgram
+20:09:37: MovableObjectFactory for type 'Decal' registered.
+20:09:37: MovableObjectFactory for type 'InternalCubemapProbe' registered.
+20:09:37: MovableObjectFactory for type 'Entity' registered.
+20:09:37: MovableObjectFactory for type 'Item' registered.
+20:09:37: MovableObjectFactory for type 'Light' registered.
+20:09:37: MovableObjectFactory for type 'Rectangle2Dv2' registered.
+20:09:37: MovableObjectFactory for type 'BillboardSet' registered.
+20:09:37: MovableObjectFactory for type 'ManualObject2' registered.
+20:09:37: MovableObjectFactory for type 'BillboardChain' registered.
+20:09:37: MovableObjectFactory for type 'RibbonTrail' registered.
+20:09:37: MovableObjectFactory for type 'WireAabb' registered.
+20:09:37: *-*-* OGRE Initialising
+20:09:37: *-*-* Version 3.0.0 (Eris)
+20:09:37: Loading library RenderSystem_Vulkan_d
+20:09:37: Installing plugin: Vulkan RenderSystem
+20:09:37: [Vulkan] Initializing VkInstance
+20:09:37: Found instance extension: VK_KHR_device_group_creation
+20:09:37: Found instance extension: VK_KHR_display
+20:09:37: Found instance extension: VK_KHR_external_fence_capabilities
+20:09:37: Found instance extension: VK_KHR_external_memory_capabilities
+20:09:37: Found instance extension: VK_KHR_external_semaphore_capabilities
+20:09:37: Found instance extension: VK_KHR_get_display_properties2
+20:09:37: Found instance extension: VK_KHR_get_physical_device_properties2
+20:09:37: Found instance extension: VK_KHR_get_surface_capabilities2
+20:09:37: Found instance extension: VK_KHR_surface
+20:09:37: Found instance extension: VK_KHR_surface_maintenance1
+20:09:37: Found instance extension: VK_KHR_surface_protected_capabilities
+20:09:37: Found instance extension: VK_KHR_win32_surface
+20:09:37: Found instance extension: VK_EXT_debug_report
+20:09:37: Found instance extension: VK_EXT_debug_utils
+20:09:37: Found instance extension: VK_EXT_direct_mode_display
+20:09:37: Found instance extension: VK_EXT_surface_maintenance1
+20:09:37: Found instance extension: VK_EXT_swapchain_colorspace
+20:09:37: Found instance extension: VK_NV_external_memory_capabilities
+20:09:37: Found instance extension: VK_KHR_portability_enumeration
+20:09:37: Found instance extension: VK_LUNARG_direct_driver_loading
+20:09:37: Found instance layer: VK_LAYER_NV_optimus
+20:09:37: Found instance layer: VK_LAYER_NV_present
+20:09:37: Found instance layer: VK_LAYER_bandicam_helper
+20:09:37: Found instance layer: VK_LAYER_OBS_HOOK
+20:09:37: Found instance layer: VK_LAYER_XSPLIT_HOOK
+20:09:37: Found instance layer: VK_LAYER_VALVE_steam_overlay
+20:09:37: Found instance layer: VK_LAYER_VALVE_steam_fossilize
+20:09:37: Found instance layer: VK_LAYER_EOS_Overlay
+20:09:37: Found instance layer: VK_LAYER_EOS_Overlay
+20:09:37: Found instance layer: VK_LAYER_LUNARG_api_dump
+20:09:37: Found instance layer: VK_LAYER_LUNARG_gfxreconstruct
+20:09:37: Found instance layer: VK_LAYER_KHRONOS_synchronization2
+20:09:37: Found instance layer: VK_LAYER_KHRONOS_validation
+20:09:37: Found instance layer: VK_LAYER_LUNARG_monitor
+20:09:37: Found instance layer: VK_LAYER_LUNARG_screenshot
+20:09:37: Found instance layer: VK_LAYER_KHRONOS_profiles
+20:09:37: Found instance layer: VK_LAYER_KHRONOS_shader_object
+20:09:37: Found instance layer: VK_LAYER_LUNARG_crash_diagnostic
+20:09:37: Requesting Instance Extension: VK_KHR_get_physical_device_properties2
+20:09:37: Requesting Instance Extension: VK_KHR_win32_surface
+20:09:37: Requesting Instance Extension: VK_KHR_surface
+20:09:37: [Vulkan] Found 1 devices
+20:09:37: [Vulkan] Found devices:
+20:09:37: NVIDIA GeForce RTX 4060 Ti #0
+20:09:37: Plugin successfully installed
+20:09:37: CPU Identifier & Features
+20:09:37: -------------------------
+20:09:37:  *   CPU ID: AuthenticAMD: AMD Ryzen 5 7500F 6-Core Processor
+20:09:37:  *   Logical cores: 12
+20:09:37:  *      SSE: yes
+20:09:37:  *     SSE2: yes
+20:09:37:  *     SSE3: yes
+20:09:37:  *      MMX: yes
+20:09:37:  *   MMXEXT: yes
+20:09:37:  *    3DNOW: no
+20:09:37:  * 3DNOWEXT: no
+20:09:37:  *     CMOV: yes
+20:09:37:  *      TSC: yes
+20:09:37:  *      FPU: yes
+20:09:37:  *      PRO: yes
+20:09:37:  *       HT: no
+20:09:37: -------------------------
+20:09:37: [Vulkan] Found 1 devices
+20:09:37: [Vulkan] Selecting device 0
+20:09:37: Found device extension: VK_KHR_16bit_storage
+20:09:37: Found device extension: VK_KHR_8bit_storage
+20:09:37: Found device extension: VK_KHR_acceleration_structure
+20:09:37: Found device extension: VK_KHR_bind_memory2
+20:09:37: Found device extension: VK_KHR_buffer_device_address
+20:09:37: Found device extension: VK_KHR_calibrated_timestamps
+20:09:37: Found device extension: VK_KHR_compute_shader_derivatives
+20:09:37: Found device extension: VK_KHR_cooperative_matrix
+20:09:37: Found device extension: VK_KHR_copy_commands2
+20:09:37: Found device extension: VK_KHR_create_renderpass2
+20:09:37: Found device extension: VK_KHR_dedicated_allocation
+20:09:37: Found device extension: VK_KHR_deferred_host_operations
+20:09:37: Found device extension: VK_KHR_depth_clamp_zero_one
+20:09:37: Found device extension: VK_KHR_depth_stencil_resolve
+20:09:37: Found device extension: VK_KHR_descriptor_update_template
+20:09:37: Found device extension: VK_KHR_device_group
+20:09:37: Found device extension: VK_KHR_draw_indirect_count
+20:09:37: Found device extension: VK_KHR_driver_properties
+20:09:37: Found device extension: VK_KHR_dynamic_rendering
+20:09:37: Found device extension: VK_KHR_dynamic_rendering_local_read
+20:09:37: Found device extension: VK_KHR_external_fence
+20:09:37: Found device extension: VK_KHR_external_fence_win32
+20:09:37: Found device extension: VK_KHR_external_memory
+20:09:37: Found device extension: VK_KHR_external_memory_win32
+20:09:37: Found device extension: VK_KHR_external_semaphore
+20:09:37: Found device extension: VK_KHR_external_semaphore_win32
+20:09:37: Found device extension: VK_KHR_format_feature_flags2
+20:09:37: Found device extension: VK_KHR_fragment_shader_barycentric
+20:09:37: Found device extension: VK_KHR_fragment_shading_rate
+20:09:37: Found device extension: VK_KHR_get_memory_requirements2
+20:09:37: Found device extension: VK_KHR_global_priority
+20:09:37: Found device extension: VK_KHR_image_format_list
+20:09:37: Found device extension: VK_KHR_imageless_framebuffer
+20:09:37: Found device extension: VK_KHR_index_type_uint8
+20:09:37: Found device extension: VK_KHR_line_rasterization
+20:09:37: Found device extension: VK_KHR_load_store_op_none
+20:09:37: Found device extension: VK_KHR_maintenance1
+20:09:37: Found device extension: VK_KHR_maintenance2
+20:09:37: Found device extension: VK_KHR_maintenance3
+20:09:37: Found device extension: VK_KHR_maintenance4
+20:09:37: Found device extension: VK_KHR_maintenance5
+20:09:37: Found device extension: VK_KHR_maintenance6
+20:09:37: Found device extension: VK_KHR_maintenance7
+20:09:37: Found device extension: VK_KHR_maintenance8
+20:09:37: Found device extension: VK_KHR_maintenance9
+20:09:37: Found device extension: VK_KHR_map_memory2
+20:09:37: Found device extension: VK_KHR_multiview
+20:09:37: Found device extension: VK_KHR_pipeline_binary
+20:09:37: Found device extension: VK_KHR_pipeline_executable_properties
+20:09:37: Found device extension: VK_KHR_pipeline_library
+20:09:37: Found device extension: VK_KHR_present_id
+20:09:37: Found device extension: VK_KHR_present_id2
+20:09:37: Found device extension: VK_KHR_present_mode_fifo_latest_ready
+20:09:37: Found device extension: VK_KHR_present_wait
+20:09:37: Found device extension: VK_KHR_present_wait2
+20:09:37: Found device extension: VK_KHR_push_descriptor
+20:09:37: Found device extension: VK_KHR_ray_query
+20:09:37: Found device extension: VK_KHR_ray_tracing_maintenance1
+20:09:37: Found device extension: VK_KHR_ray_tracing_pipeline
+20:09:37: Found device extension: VK_KHR_ray_tracing_position_fetch
+20:09:37: Found device extension: VK_KHR_relaxed_block_layout
+20:09:37: Found device extension: VK_KHR_robustness2
+20:09:37: Found device extension: VK_KHR_sampler_mirror_clamp_to_edge
+20:09:37: Found device extension: VK_KHR_sampler_ycbcr_conversion
+20:09:37: Found device extension: VK_KHR_separate_depth_stencil_layouts
+20:09:37: Found device extension: VK_KHR_shader_atomic_int64
+20:09:37: Found device extension: VK_KHR_shader_bfloat16
+20:09:37: Found device extension: VK_KHR_shader_clock
+20:09:37: Found device extension: VK_KHR_shader_draw_parameters
+20:09:37: Found device extension: VK_KHR_shader_expect_assume
+20:09:37: Found device extension: VK_KHR_shader_float16_int8
+20:09:37: Found device extension: VK_KHR_shader_float_controls
+20:09:37: Found device extension: VK_KHR_shader_float_controls2
+20:09:37: Found device extension: VK_KHR_shader_integer_dot_product
+20:09:37: Found device extension: VK_KHR_shader_maximal_reconvergence
+20:09:37: Found device extension: VK_KHR_shader_non_semantic_info
+20:09:37: Found device extension: VK_KHR_shader_quad_control
+20:09:37: Found device extension: VK_KHR_shader_relaxed_extended_instruction
+20:09:37: Found device extension: VK_KHR_shader_subgroup_extended_types
+20:09:37: Found device extension: VK_KHR_shader_subgroup_rotate
+20:09:37: Found device extension: VK_KHR_shader_subgroup_uniform_control_flow
+20:09:37: Found device extension: VK_KHR_shader_terminate_invocation
+20:09:37: Found device extension: VK_KHR_shader_untyped_pointers
+20:09:37: Found device extension: VK_KHR_spirv_1_4
+20:09:37: Found device extension: VK_KHR_storage_buffer_storage_class
+20:09:37: Found device extension: VK_KHR_swapchain
+20:09:37: Found device extension: VK_KHR_swapchain_maintenance1
+20:09:37: Found device extension: VK_KHR_swapchain_mutable_format
+20:09:37: Found device extension: VK_KHR_synchronization2
+20:09:37: Found device extension: VK_KHR_timeline_semaphore
+20:09:37: Found device extension: VK_KHR_unified_image_layouts
+20:09:37: Found device extension: VK_KHR_uniform_buffer_standard_layout
+20:09:37: Found device extension: VK_KHR_variable_pointers
+20:09:37: Found device extension: VK_KHR_vertex_attribute_divisor
+20:09:37: Found device extension: VK_KHR_video_decode_av1
+20:09:37: Found device extension: VK_KHR_video_decode_h264
+20:09:37: Found device extension: VK_KHR_video_decode_h265
+20:09:37: Found device extension: VK_KHR_video_decode_queue
+20:09:37: Found device extension: VK_KHR_video_decode_vp9
+20:09:37: Found device extension: VK_KHR_video_encode_av1
+20:09:37: Found device extension: VK_KHR_video_encode_h264
+20:09:37: Found device extension: VK_KHR_video_encode_h265
+20:09:37: Found device extension: VK_KHR_video_encode_intra_refresh
+20:09:37: Found device extension: VK_KHR_video_encode_quantization_map
+20:09:37: Found device extension: VK_KHR_video_encode_queue
+20:09:37: Found device extension: VK_KHR_video_maintenance1
+20:09:37: Found device extension: VK_KHR_video_maintenance2
+20:09:37: Found device extension: VK_KHR_video_queue
+20:09:37: Found device extension: VK_KHR_vulkan_memory_model
+20:09:37: Found device extension: VK_KHR_win32_keyed_mutex
+20:09:37: Found device extension: VK_KHR_workgroup_memory_explicit_layout
+20:09:37: Found device extension: VK_KHR_zero_initialize_workgroup_memory
+20:09:37: Found device extension: VK_EXT_4444_formats
+20:09:37: Found device extension: VK_EXT_attachment_feedback_loop_dynamic_state
+20:09:37: Found device extension: VK_EXT_attachment_feedback_loop_layout
+20:09:37: Found device extension: VK_EXT_blend_operation_advanced
+20:09:37: Found device extension: VK_EXT_border_color_swizzle
+20:09:37: Found device extension: VK_EXT_buffer_device_address
+20:09:37: Found device extension: VK_EXT_calibrated_timestamps
+20:09:37: Found device extension: VK_EXT_color_write_enable
+20:09:37: Found device extension: VK_EXT_conditional_rendering
+20:09:37: Found device extension: VK_EXT_conservative_rasterization
+20:09:37: Found device extension: VK_EXT_custom_border_color
+20:09:37: Found device extension: VK_EXT_depth_bias_control
+20:09:37: Found device extension: VK_EXT_depth_clamp_control
+20:09:37: Found device extension: VK_EXT_depth_clamp_zero_one
+20:09:37: Found device extension: VK_EXT_depth_clip_control
+20:09:37: Found device extension: VK_EXT_depth_clip_enable
+20:09:37: Found device extension: VK_EXT_depth_range_unrestricted
+20:09:37: Found device extension: VK_EXT_descriptor_buffer
+20:09:37: Found device extension: VK_EXT_descriptor_indexing
+20:09:37: Found device extension: VK_EXT_device_address_binding_report
+20:09:37: Found device extension: VK_EXT_device_fault
+20:09:37: Found device extension: VK_EXT_device_generated_commands
+20:09:37: Found device extension: VK_EXT_discard_rectangles
+20:09:37: Found device extension: VK_EXT_dynamic_rendering_unused_attachments
+20:09:37: Found device extension: VK_EXT_extended_dynamic_state
+20:09:37: Found device extension: VK_EXT_extended_dynamic_state2
+20:09:37: Found device extension: VK_EXT_extended_dynamic_state3
+20:09:37: Found device extension: VK_EXT_external_memory_host
+20:09:37: Found device extension: VK_EXT_fragment_shader_interlock
+20:09:37: Found device extension: VK_EXT_full_screen_exclusive
+20:09:37: Found device extension: VK_EXT_global_priority
+20:09:37: Found device extension: VK_EXT_global_priority_query
+20:09:37: Found device extension: VK_EXT_graphics_pipeline_library
+20:09:37: Found device extension: VK_EXT_hdr_metadata
+20:09:37: Found device extension: VK_EXT_host_image_copy
+20:09:37: Found device extension: VK_EXT_host_query_reset
+20:09:37: Found device extension: VK_EXT_image_2d_view_of_3d
+20:09:37: Found device extension: VK_EXT_image_robustness
+20:09:37: Found device extension: VK_EXT_image_sliced_view_of_3d
+20:09:37: Found device extension: VK_EXT_image_view_min_lod
+20:09:37: Found device extension: VK_EXT_index_type_uint8
+20:09:37: Found device extension: VK_EXT_inline_uniform_block
+20:09:37: Found device extension: VK_EXT_legacy_vertex_attributes
+20:09:37: Found device extension: VK_EXT_line_rasterization
+20:09:37: Found device extension: VK_EXT_load_store_op_none
+20:09:37: Found device extension: VK_EXT_memory_budget
+20:09:37: Found device extension: VK_EXT_memory_priority
+20:09:37: Found device extension: VK_EXT_mesh_shader
+20:09:37: Found device extension: VK_EXT_multi_draw
+20:09:37: Found device extension: VK_EXT_mutable_descriptor_type
+20:09:37: Found device extension: VK_EXT_nested_command_buffer
+20:09:37: Found device extension: VK_EXT_non_seamless_cube_map
+20:09:37: Found device extension: VK_EXT_opacity_micromap
+20:09:37: Found device extension: VK_EXT_pageable_device_local_memory
+20:09:37: Found device extension: VK_EXT_pci_bus_info
+20:09:37: Found device extension: VK_EXT_pipeline_creation_cache_control
+20:09:37: Found device extension: VK_EXT_pipeline_creation_feedback
+20:09:37: Found device extension: VK_EXT_pipeline_library_group_handles
+20:09:37: Found device extension: VK_EXT_pipeline_robustness
+20:09:37: Found device extension: VK_EXT_post_depth_coverage
+20:09:37: Found device extension: VK_EXT_present_mode_fifo_latest_ready
+20:09:37: Found device extension: VK_EXT_primitive_topology_list_restart
+20:09:37: Found device extension: VK_EXT_primitives_generated_query
+20:09:37: Found device extension: VK_EXT_private_data
+20:09:37: Found device extension: VK_EXT_provoking_vertex
+20:09:37: Found device extension: VK_EXT_queue_family_foreign
+20:09:37: Found device extension: VK_EXT_robustness2
+20:09:37: Found device extension: VK_EXT_sample_locations
+20:09:37: Found device extension: VK_EXT_sampler_filter_minmax
+20:09:37: Found device extension: VK_EXT_scalar_block_layout
+20:09:37: Found device extension: VK_EXT_separate_stencil_usage
+20:09:37: Found device extension: VK_EXT_shader_atomic_float
+20:09:37: Found device extension: VK_EXT_shader_demote_to_helper_invocation
+20:09:37: Found device extension: VK_EXT_shader_float8
+20:09:37: Found device extension: VK_EXT_shader_image_atomic_int64
+20:09:37: Found device extension: VK_EXT_shader_module_identifier
+20:09:37: Found device extension: VK_EXT_shader_object
+20:09:37: Found device extension: VK_EXT_shader_replicated_composites
+20:09:37: Found device extension: VK_EXT_shader_subgroup_ballot
+20:09:37: Found device extension: VK_EXT_shader_subgroup_vote
+20:09:37: Found device extension: VK_EXT_shader_viewport_index_layer
+20:09:37: Found device extension: VK_EXT_subgroup_size_control
+20:09:37: Found device extension: VK_EXT_swapchain_maintenance1
+20:09:37: Found device extension: VK_EXT_texel_buffer_alignment
+20:09:37: Found device extension: VK_EXT_tooling_info
+20:09:37: Found device extension: VK_EXT_transform_feedback
+20:09:37: Found device extension: VK_EXT_vertex_attribute_divisor
+20:09:37: Found device extension: VK_EXT_vertex_attribute_robustness
+20:09:37: Found device extension: VK_EXT_vertex_input_dynamic_state
+20:09:37: Found device extension: VK_EXT_ycbcr_2plane_444_formats
+20:09:37: Found device extension: VK_EXT_ycbcr_image_arrays
+20:09:37: Found device extension: VK_EXT_zero_initialize_device_memory
+20:09:37: Found device extension: VK_NV_acquire_winrt_display
+20:09:37: Found device extension: VK_NV_clip_space_w_scaling
+20:09:37: Found device extension: VK_NV_cluster_acceleration_structure
+20:09:37: Found device extension: VK_NV_compute_shader_derivatives
+20:09:37: Found device extension: VK_NV_cooperative_matrix
+20:09:37: Found device extension: VK_NV_cooperative_matrix2
+20:09:37: Found device extension: VK_NV_cooperative_vector
+20:09:37: Found device extension: VK_NV_copy_memory_indirect
+20:09:37: Found device extension: VK_NV_corner_sampled_image
+20:09:37: Found device extension: VK_NV_coverage_reduction_mode
+20:09:37: Found device extension: VK_NV_cuda_kernel_launch
+20:09:37: Found device extension: VK_NV_dedicated_allocation
+20:09:37: Found device extension: VK_NV_dedicated_allocation_image_aliasing
+20:09:37: Found device extension: VK_NV_descriptor_pool_overallocation
+20:09:37: Found device extension: VK_NV_device_diagnostic_checkpoints
+20:09:37: Found device extension: VK_NV_device_diagnostics_config
+20:09:37: Found device extension: VK_NV_device_generated_commands
+20:09:37: Found device extension: VK_NV_device_generated_commands_compute
+20:09:37: Found device extension: VK_NV_disk_cache_utils
+20:09:37: Found device extension: VK_NV_external_compute_queue
+20:09:37: Found device extension: VK_NV_external_memory
+20:09:37: Found device extension: VK_NV_external_memory_win32
+20:09:37: Found device extension: VK_NV_fill_rectangle
+20:09:37: Found device extension: VK_NV_fragment_coverage_to_color
+20:09:37: Found device extension: VK_NV_fragment_shader_barycentric
+20:09:37: Found device extension: VK_NV_fragment_shading_rate_enums
+20:09:37: Found device extension: VK_NV_framebuffer_mixed_samples
+20:09:37: Found device extension: VK_NV_geometry_shader_passthrough
+20:09:37: Found device extension: VK_NV_inherited_viewport_scissor
+20:09:37: Found device extension: VK_NV_internal_nvpresent
+20:09:37: Found device extension: VK_NV_linear_color_attachment
+20:09:37: Found device extension: VK_NV_low_latency
+20:09:37: Found device extension: VK_NV_low_latency2
+20:09:37: Found device extension: VK_NV_memory_decompression
+20:09:37: Found device extension: VK_NV_mesh_shader
+20:09:37: Found device extension: VK_NV_optical_flow
+20:09:37: Found device extension: VK_NV_partitioned_acceleration_structure
+20:09:37: Found device extension: VK_NV_present_metering
+20:09:37: Found device extension: VK_NV_raw_access_chains
+20:09:37: Found device extension: VK_NV_ray_tracing
+20:09:37: Found device extension: VK_NV_ray_tracing_invocation_reorder
+20:09:37: Found device extension: VK_NV_ray_tracing_motion_blur
+20:09:37: Found device extension: VK_NV_representative_fragment_test
+20:09:37: Found device extension: VK_NV_sample_mask_override_coverage
+20:09:37: Found device extension: VK_NV_scissor_exclusive
+20:09:37: Found device extension: VK_NV_shader_atomic_float16_vector
+20:09:37: Found device extension: VK_NV_shader_image_footprint
+20:09:37: Found device extension: VK_NV_shader_sm_builtins
+20:09:37: Found device extension: VK_NV_shader_subgroup_partitioned
+20:09:37: Found device extension: VK_NV_shading_rate_image
+20:09:37: Found device extension: VK_NV_viewport_array2
+20:09:37: Found device extension: VK_NV_viewport_swizzle
+20:09:37: Found device extension: VK_NV_win32_keyed_mutex
+20:09:37: Found device extension: VK_NVX_binary_import
+20:09:37: Found device extension: VK_NVX_image_view_handle
+20:09:37: Found device extension: VK_NVX_multiview_per_view_attributes
+20:09:37: Found device extension: VK_AMD_buffer_marker
+20:09:37: Found device extension: VK_GOOGLE_hlsl_functionality1
+20:09:37: Found device extension: VK_GOOGLE_user_type
+20:09:37: Requesting Extension: VK_KHR_16bit_storage
+20:09:37: Requesting Extension: VK_KHR_maintenance2
+20:09:37: Requesting Extension: VK_KHR_shader_float16_int8
+20:09:37: Requesting Extension: VK_KHR_storage_buffer_storage_class
+20:09:37: Requesting Extension: VK_EXT_shader_subgroup_vote
+20:09:37: Requesting Extension: VK_EXT_shader_viewport_index_layer
+20:09:37: Requesting Extension: VK_KHR_swapchain
+20:09:37: [Vulkan] API Version: 1.4.325 (0x404145)
+20:09:37: [Vulkan] Driver Version (raw): 0x93d58000
+20:09:37: [Vulkan] Vendor ID: 0x10de
+20:09:37: [Vulkan] Device ID: 0x2805
+20:09:37: Registering ResourceManager for type GpuProgram
+20:09:37: RenderSystem capabilities
+20:09:37: -------------------------
+20:09:37: RenderSystem Name: Vulkan Rendering Subsystem
+20:09:37: GPU Vendor: nvidia
+20:09:37: Device Name: NVIDIA GeForce RTX 4060 Ti
+20:09:37: Driver Version: 591.86.0.0
+20:09:37:  * Fixed function pipeline: no
+20:09:37:  * Hardware generation of mipmaps: yes
+20:09:37:  * Texture blending: yes
+20:09:37:  * Anisotropic texture filtering: yes
+20:09:37:  * Dot product texture operation: yes
+20:09:37:  * Cube mapping: yes
+20:09:37:  * Hardware stencil buffer: yes
+20:09:37:    - Stencil depth: 8
+20:09:37:    - Two sided stencil support: yes
+20:09:37:    - Wrap stencil values: yes
+20:09:37:  * Hardware vertex / index buffers: yes
+20:09:37:  * 32-bit index buffers: no
+20:09:37:  * Vertex programs: no
+20:09:37:  * Number of floating-point constants for vertex programs: 256
+20:09:37:  * Number of integer constants for vertex programs: 256
+20:09:37:  * Number of boolean constants for vertex programs: 256
+20:09:37:  * Fragment programs: no
+20:09:37:  * Number of floating-point constants for fragment programs: 256
+20:09:37:  * Number of integer constants for fragment programs: 256
+20:09:37:  * Number of boolean constants for fragment programs: 256
+20:09:37:  * Geometry programs: no
+20:09:37:  * Number of floating-point constants for geometry programs: 256
+20:09:37:  * Number of integer constants for geometry programs: 256
+20:09:37:  * Number of boolean constants for geometry programs: 256
+20:09:37:  * Tessellation Hull programs: no
+20:09:37:  * Number of floating-point constants for tessellation hull programs: 256
+20:09:37:  * Number of integer constants for tessellation hull programs: 256
+20:09:37:  * Number of boolean constants for tessellation hull programs: 256
+20:09:37:  * Tessellation Domain programs: no
+20:09:37:  * Number of floating-point constants for tessellation domain programs: 256
+20:09:37:  * Number of integer constants for tessellation domain programs: 256
+20:09:37:  * Number of boolean constants for tessellation domain programs: 256
+20:09:37:  * Compute programs: yes
+20:09:37:  * Number of floating-point constants for compute programs: 256
+20:09:37:  * Number of integer constants for compute programs: 256
+20:09:37:  * Number of boolean constants for compute programs: 256
+20:09:37:  * Supported Shader Profiles: glsl glslvk hlsl hlslvk
+20:09:37:  * Texture Compression: yes
+20:09:37:    - DXT: yes
+20:09:37:    - VTC: no
+20:09:37:    - PVRTC: no
+20:09:37:    - ATC: no
+20:09:37:    - ETC1: no
+20:09:37:    - ETC2: no
+20:09:37:    - BC4/BC5: yes
+20:09:37:    - BC6H/BC7: yes
+20:09:37:    - ASTC: no
+20:09:37:  * Hardware Occlusion Query: no
+20:09:37:  * User clip planes: yes
+20:09:37:  * VET_UBYTE4 vertex element type: yes
+20:09:37:  * Infinite far plane projection: yes
+20:09:37:  * Hardware render-to-texture: yes
+20:09:37:  * Floating point textures: yes
+20:09:37:  * Non-power-of-two textures: yes
+20:09:37:  * 1d textures: yes
+20:09:37:  * Volume textures: yes
+20:09:37:  * Max Texture resolution (2D) 16384
+20:09:37:  * Max Texture resolution (3D) 4096
+20:09:37:  * Max Texture resolution (Cubemaps) 16384
+20:09:37:  * Multiple Render Targets: 1
+20:09:37:    - With different bit depths: no
+20:09:37:  * Point Sprites: yes
+20:09:37:  * Extended point parameters: yes
+20:09:37:  * Max Point Size: 256
+20:09:37:  * Vertex texture fetch: no
+20:09:37:  * Number of world matrices: 0
+20:09:37:  * Number of texture units: 32
+20:09:37:  * Stencil buffer depth: 8
+20:09:37:  * Number of vertex blend matrices: 0
+20:09:37:  * Render to Vertex Buffer : no
+20:09:37:  * Hardware Atomic Counters: no
+20:09:37:  * Shader 16-bit floating point (half): no
+20:09:37:  * Compute max threads per threadgroup per axis: 1024, 1024, 64
+20:09:37:  * Compute max threads per threadgroup total: 1024
+20:09:37:  * Using Reverse Z: yes
+20:09:37: Supported memory types for general buffer usage: 31
+20:09:37: Supported memory types for reading: 31
+20:09:37: VkDevice will use coherent memory buffers: true
+20:09:37: VkDevice will use non-coherent memory buffers: false
+20:09:37: VkDevice will prefer coherent memory buffers: true
+20:09:37: VkDevice will use coherent memory for reading: true
+20:09:37: VkDevice read memory is coherent: true
+20:09:37: Trying presentMode = IMMEDIATE_KHR
+20:09:37: Chosen presentMode = IMMEDIATE_KHR
+20:09:37: surfaceCaps.currentTransform = 1
+20:09:37: DefaultWorkQueue('Root') initialising on thread main.
+20:09:37:  _hlmsMacroblockCreated 
+20:09:37:  _hlmsBlendblockCreated 
+20:09:37: Particle Renderer Type 'billboard' registered
+20:09:37:  _hlmsSamplerblockCreated 
+20:09:37:  _hlmsSamplerblockCreated 
+20:09:37:  _hlmsSamplerblockCreated 
+20:09:37:  _hlmsSamplerblockCreated 
+20:09:37: Added resource location 'D:\Git\P.R.I.S.M\Project\PRISM_Engine\build\Debug\Media/Common' of type 'FileSystem' to resource group 'General'
+20:09:37: Parsing scripts for resource group Autodetect
+20:09:37: Finished parsing scripts for resource group Autodetect
+20:09:37: Creating resources for group Autodetect
+20:09:37: All done
+20:09:37: Parsing scripts for resource group General
+20:09:37: Finished parsing scripts for resource group General
+20:09:37: Creating resources for group General
+20:09:37: All done
+20:09:37: Parsing scripts for resource group Internal
+20:09:37: Finished parsing scripts for resource group Internal
+20:09:37: Creating resources for group Internal
+20:09:37: All done

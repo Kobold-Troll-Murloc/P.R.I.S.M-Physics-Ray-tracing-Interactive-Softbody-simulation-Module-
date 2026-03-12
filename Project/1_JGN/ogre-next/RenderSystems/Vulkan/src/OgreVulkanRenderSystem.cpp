@@ -2115,6 +2115,11 @@ namespace Ogre
         mComputeTableDirty = false;
     }
     //-------------------------------------------------------------------------
+    // [PRISM HYBRID GLOBAL CONTROL]
+    bool gPrismHybridEnabled = false;
+    void (*gPrismRTCallback)(VkCommandBuffer, void*) = nullptr;
+    void* gPrismUserData = nullptr;
+
     void VulkanRenderSystem::_render( const CbDrawCallIndexed *cmd )
     {
         // check, if we deferred pipeline compilation due to the skipped deadline
@@ -2124,9 +2129,18 @@ namespace Ogre
         flushRootLayout();
 
         VkCommandBuffer cmdBuffer = mDevice->mGraphicsQueue.getCurrentCmdBuffer();
-        vkCmdDrawIndexedIndirect( cmdBuffer, mIndirectBuffer,
-                                  reinterpret_cast<VkDeviceSize>( cmd->indirectBufferOffset ),
-                                  cmd->numDraws, sizeof( CbDrawIndexed ) );
+
+        if( gPrismHybridEnabled && gPrismRTCallback )
+        {
+            // [PRISM HYBRID BRANCH]
+            gPrismRTCallback( cmdBuffer, gPrismUserData );
+        }
+        else
+        {
+            vkCmdDrawIndexedIndirect( cmdBuffer, mIndirectBuffer,
+                                      reinterpret_cast<VkDeviceSize>( cmd->indirectBufferOffset ),
+                                      cmd->numDraws, sizeof( CbDrawIndexed ) );
+        }
     }
     //-------------------------------------------------------------------------
     void VulkanRenderSystem::_render( const CbDrawCallStrip *cmd )
@@ -2256,8 +2270,17 @@ namespace Ogre
         flushRootLayout();
 
         VkCommandBuffer cmdBuffer = mDevice->mGraphicsQueue.getCurrentCmdBuffer();
-        vkCmdDrawIndexed( cmdBuffer, cmd->primCount, cmd->instanceCount, cmd->firstVertexIndex,
-                          (int32_t)mCurrentVertexBuffer->vertexStart, cmd->baseInstance );
+
+        if( gPrismHybridEnabled && gPrismRTCallback )
+        {
+            // [PRISM HYBRID BRANCH]
+            gPrismRTCallback( cmdBuffer, gPrismUserData );
+        }
+        else
+        {
+            vkCmdDrawIndexed( cmdBuffer, cmd->primCount, cmd->instanceCount, cmd->firstVertexIndex,
+                              (int32_t)mCurrentVertexBuffer->vertexStart, cmd->baseInstance );
+        }
     }
     //-------------------------------------------------------------------------
     void VulkanRenderSystem::_render( const v1::CbDrawCallStrip *cmd )

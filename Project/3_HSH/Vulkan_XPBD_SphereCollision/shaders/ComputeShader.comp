@@ -1,0 +1,158 @@
+#version 450
+
+struct ClothNode {
+    vec4 pos;
+    vec4 color;
+    vec4 vel;
+    vec4 normal;
+    float isFixed;
+    float _padding[3];
+};
+
+// C++에서 설정한 Descriptor Sets와 매칭
+layout(std430, binding = 0) readonly buffer InputNodes {
+    ClothNode nodesIn[];
+};
+
+layout(std430, binding = 1) writeonly buffer OutputNodes {
+    ClothNode nodesOut[];
+};
+
+// dt(타임스텝)를 받는 Push Constant
+layout(push_constant) uniform PushConstants {
+    float dt;
+    float u_Time; // 누적된 전체 시간
+    float radius;
+    float amplitude;
+    vec4 sphereCenter;
+    vec4 sphereCenterOriginal;
+};
+
+// 워크그룹 크기 설정 (16x16 그리드이므로 16x16x1 권장)
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// 공유 메모리
+shared vec3 sharedP[256];
+shared float sharedInvMass[256];
+
+// 시뮬레이션 상수
+const float springRestLength = 0.1;
+//const float stiffness = 1048576.0;
+const float stiffness = 65536.0;
+//const float stiffness = 16382.0;
+//const float stiffness = 8192.0;
+const float damping = 0.98;
+const vec3 gravity = vec3(0.0, -9.8, 0.0);
+const int WIDTH = 16;
+const int HEIGHT = 16;
+
+vec3 center = sphereCenter.xyz;
+float speed = sphereCenter.w;
+
+void main() {
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+    uint lx = gl_LocalInvocationID.x;
+    uint ly = gl_LocalInvocationID.y;
+
+    if (x >= WIDTH || y >= HEIGHT) return;
+    uint index = y * WIDTH + x;
+    uint localIndex = ly * WIDTH + lx;
+
+    ClothNode current = nodesIn[index];
+    float invMass = (current.isFixed > 0.5) ? 0.0 : 1.0;
+    sharedInvMass[localIndex] = invMass;
+
+    vec3 p = current.pos.xyz;
+    vec3 v = current.vel.xyz;
+
+    int subStepCnt = 4;
+    float sdt = dt / float(subStepCnt);
+    float alpha = 1.0 / stiffness;
+    float alpha_tilde = alpha / (sdt * sdt);
+
+    for(int i = 0; i < subStepCnt; i++) {
+        // --- STEP 1: 예측 위치 계산 (External Forces only) ---
+        v *= pow(damping, 1.0 / float(subStepCnt));
+        vec3 externalAcc = gravity;
+        vec3 prevP = p;
+
+        if(invMass > 0.0) {
+            p = p + v * sdt + externalAcc * sdt * sdt;
+        }
+
+        // --- STEP 2: 제약 조건 해결 (Distance Constraints) ---
+        float lambdas[8] = {0,0,0,0,0,0,0,0};
+        int constraintIterations = 4;
+        for(int j = 0; j < constraintIterations; j++) {
+            sharedP[localIndex] = p;
+            barrier();
+
+            if(invMass > 0.0) {
+                vec3 totalDeltaP = vec3(0.0);
+                int neighborCount = 0;
+
+                for (int i = -1; i <= 1; i++) {
+                    for (int j = -1; j <= 1; j++) {
+                        if (i == 0 && j == 0) continue;
+
+                        int nx = int(lx) + i;
+                        int ny = int(ly) + j;
+
+                        if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT) {
+                            uint neighborIndex = uint(ny * gl_WorkGroupSize.x + nx);
+                            vec3 neighborPos = sharedP[neighborIndex];
+
+                            float restLen = (i != 0 && j != 0) ? springRestLength * 1.414 : springRestLength;
+                            vec3 diff = p - neighborPos;
+                            float dist = length(diff);
+
+                            if (dist > 0.0001) {
+                                float C = dist - restLen;
+                                float w1 = invMass;
+                                float w2 = sharedInvMass[neighborIndex];
+
+                                float dLambda = (-C - alpha_tilde * lambdas[neighborCount]) / (w1 + w2 + alpha_tilde) ;
+                                lambdas[neighborCount] += dLambda;
+
+                                vec3 correction = dLambda * w1 * (diff / dist);
+                                totalDeltaP += correction;
+                            }
+                            neighborCount++;
+                        }
+                    }
+                }
+                p += totalDeltaP * 0.5f;
+                // 구체 충돌 처리
+                vec3 toCenter = p - center;
+                float distToCenter = length(toCenter);
+                if(distToCenter < radius) {
+                    vec3 n = normalize(toCenter);
+                    p = center + n * radius;
+                }
+            }
+            barrier();
+        }
+        vec3 toCenterFinal = p - center;
+        float distFinal = length(toCenterFinal);
+        if(distFinal < radius) {
+            vec3 n = toCenterFinal / distFinal;
+            p = center + n * radius; // 최종 위치 강제 고정
+
+            // 마찰력 적용: 이전 위치와의 변위에서 수직 성분 제거
+            vec3 deltaP = p - prevP;
+            vec3 normalPart = dot(deltaP, n) * n;
+            vec3 tangentPart = deltaP - normalPart;
+            
+            float friction = 0.3; // 0.0 ~ 1.0 사이 값
+            p -= tangentPart * friction; 
+        }
+
+        v = (p - prevP) / sdt;
+    }
+
+    // --- STEP 3: 최종 결과 저장 ---
+    nodesOut[index] = current;
+    nodesOut[index].pos = vec4(p, 1.0);
+    nodesOut[index].vel = vec4(v, 0.0);
+}

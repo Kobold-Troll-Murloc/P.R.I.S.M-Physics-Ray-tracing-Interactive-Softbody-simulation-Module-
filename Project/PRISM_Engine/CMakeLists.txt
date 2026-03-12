@@ -5,61 +5,122 @@ project(PRISM_Engine CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# vcpkg 모듈 경로 추가
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/share/ogre-next")
+# [PRISM] MSVC: UTF-8 source encoding (prevents Korean comment parsing corruption)
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
 
-# OGRE 및 SDL2 패키지 찾기
-find_package(OGRE REQUIRED COMPONENTS Main HlmsPbs HlmsUnlit)
+# SDL2 및 Vulkan 패키지 찾기
 find_package(SDL2 CONFIG REQUIRED)
+find_package(Vulkan REQUIRED)
 
 # 실행 파일 생성
-add_executable(${PROJECT_NAME} src/main.cpp)
-
-
-set(OGRE_INCLUDE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/include/OGRE-Next")
-target_include_directories(${PROJECT_NAME} PRIVATE
-    "${OGRE_INCLUDE_ROOT}"
-    "${OGRE_INCLUDE_ROOT}/Hlms/Pbs"
-    "${OGRE_INCLUDE_ROOT}/Hlms/Unlit"
-    "${OGRE_INCLUDE_ROOT}/Hlms/Common"
+add_executable(${PROJECT_NAME} 
+    src/main.cpp
+    src/PrismRTPipeline.h
+    src/PrismRTPipeline.cpp
+    src/PrismCompositorPass.h
+    src/PrismCompositorPass.cpp
 )
 
-# OgreNext 라이브러리 링크 (OGRE_LIBRARIES에 HlmsPbs/HlmsUnlit가 포함되지 않으므로 별도 추가)
+# [PRISM] Manual Ogre Paths from 1_JGN (To bypass vcpkg build issues for now)
+set(OGRE_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../1_JGN/ogre-next")
+set(OGRE_BUILD_ROOT "${OGRE_SOURCE_ROOT}/build")
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    "${OGRE_SOURCE_ROOT}/OgreMain/include"
+    "${OGRE_SOURCE_ROOT}/OgreMain/include/Compositor"
+    "${OGRE_SOURCE_ROOT}/OgreMain/include/Compositor/Pass"
+    "${OGRE_SOURCE_ROOT}/OgreMain/include/Vao"
+    "${OGRE_SOURCE_ROOT}/Components/Hlms/Pbs/include"
+    "${OGRE_SOURCE_ROOT}/Components/Hlms/Unlit/include"
+    "${OGRE_SOURCE_ROOT}/Components/Hlms/Common/include"
+    "${OGRE_SOURCE_ROOT}/RenderSystems/Vulkan/include"
+    "${OGRE_BUILD_ROOT}/include" # For OgreBuildSettings.h
+    "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/include" # Other deps
+)
+
+set(OGRE_LIB_DIR "${OGRE_BUILD_ROOT}/lib/Debug")
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${OGRE_LIBRARIES}
-    ${OGRE_HlmsPbs_LIBRARY}
-    ${OGRE_HlmsUnlit_LIBRARY}
+    "${OGRE_LIB_DIR}/OgreNextMain_d.lib"
+    "${OGRE_LIB_DIR}/OgreNextHlmsPbs_d.lib"
+    "${OGRE_LIB_DIR}/OgreNextHlmsUnlit_d.lib"
+    "${OGRE_LIB_DIR}/RenderSystem_Vulkan_d.lib"
+    Vulkan::Vulkan
     $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
     SDL2::SDL2
 )
 
-# vcpkg 경로 (Debug/Release 분기)
-set(VCPKG_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}")
-
-# OGRE 렌더 시스템 플러그인 DLL — vcpkg가 자동 복사하지 않으므로 직접 복사
-set(OGRE_PLUGIN_DLLS RenderSystem_Vulkan RenderSystem_Direct3D11 RenderSystem_GL3Plus)
+# Copy DLLs from 1_JGN
+set(OGRE_BIN_DIR_1_JGN "${OGRE_BUILD_ROOT}/bin/Debug")
+set(OGRE_PLUGIN_DLLS RenderSystem_Vulkan RenderSystem_Direct3D11 RenderSystem_GL3Plus OgreNextMain)
 foreach(DLL ${OGRE_PLUGIN_DLLS})
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<IF:$<CONFIG:Debug>,${VCPKG_BIN_DIR}/debug/bin/${DLL}_d.dll,${VCPKG_BIN_DIR}/bin/${DLL}.dll>"
+            "${OGRE_BIN_DIR_1_JGN}/${DLL}_d.dll"
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-        COMMENT "Copying ${DLL}..."
+        COMMENT "Copying ${DLL}_d.dll from 1_JGN..."
     )
 endforeach()
 
-# vulkan-1.dll (Debug suffix 없음)
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<IF:$<CONFIG:Debug>,${VCPKG_BIN_DIR}/debug/bin/vulkan-1.dll,${VCPKG_BIN_DIR}/bin/vulkan-1.dll>"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-    COMMENT "Copying vulkan-1.dll..."
+# [PRISM] Shader Compilation
+find_program(GLSLANG_VALIDATOR glslangValidator REQUIRED)
+set(SHADER_SOURCES 
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/raygenbsdf.rgen"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/miss.rmiss"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/closesthitbsdf.rchit"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.rmiss"
 )
 
-# OGRE HLMS 셰이더 소스 복사 (런타임에 GPU 셰이더 컴파일용)
-set(OGRE_HLMS_SOURCE "D:/Git/vcpkg/buildtrees/ogre-next/src/v3.0.0-3d16ad2943.clean/Samples/Media/Hlms")
+foreach(SHADER ${SHADER_SOURCES})
+    get_filename_component(SHADER_NAME ${SHADER} NAME)
+    get_filename_component(SHADER_EXT ${SHADER} EXT)
+    set(SPV_FILE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${SHADER_NAME}.spv")
+    
+    # [PRISM] Map extensions to glslang stages
+    if(SHADER_EXT STREQUAL ".rgen")
+        set(STAGE rgen)
+    elseif(SHADER_EXT STREQUAL ".rmiss")
+        set(STAGE rmiss)
+    elseif(SHADER_EXT STREQUAL ".rchit")
+        set(STAGE rchit)
+    else()
+        set(STAGE vert)
+    endif()
+
+    add_custom_command(
+        OUTPUT ${SPV_FILE}
+        COMMAND ${GLSLANG_VALIDATOR} --target-env vulkan1.2 -S ${STAGE} -V ${SHADER} -o ${SPV_FILE}
+        DEPENDS ${SHADER}
+        COMMENT "Compiling shader ${SHADER_NAME} to SPIR-V (stage: ${STAGE})..."
+    )
+    list(APPEND SHADER_SPV_FILES ${SPV_FILE})
+endforeach()
+
+# [PRISM] Ensure shaders are compiled before copying
+add_custom_target(PRISM_Shaders DEPENDS ${SHADER_SPV_FILES})
+add_dependencies(${PROJECT_NAME} PRISM_Shaders)
+
+# Copy RT shaders (Updated to copy compiled .spv files)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${OGRE_HLMS_SOURCE}"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/Media/Hlms"
-    COMMENT "Copying HLMS shaders to Media/Hlms/..."
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders"
+    COMMENT "Copying PRISM RT shaders to build directory..."
+)
+
+# Copy bunny.obj
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/bunny.obj"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/bunny.obj"
+    COMMENT "Copying bunny.obj to build directory..."
+)
+
+# Copy cube.obj
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/cube.obj"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/cube.obj"
+    COMMENT "Copying cube.obj to build directory..."
 )

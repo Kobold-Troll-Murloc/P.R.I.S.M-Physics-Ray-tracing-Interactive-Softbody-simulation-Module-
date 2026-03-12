@@ -134,6 +134,12 @@ namespace Ogre
 
             // VkPhysicalDevicePipelineCreationCacheControlFeatures
             VkBool32 pipelineCreationCacheControl;
+
+            // [PRISM] Ray Tracing Features
+            VkBool32 rayTracingPipeline;
+            VkBool32 accelerationStructure;
+            VkBool32 bufferDeviceAddress;
+            VkBool32 runtimeDescriptorArray;
         };
 
         // clang-format off
