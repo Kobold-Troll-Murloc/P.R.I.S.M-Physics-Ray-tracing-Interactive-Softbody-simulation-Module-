@@ -39,9 +39,13 @@
 #include <OgreHlmsUnlit.h>
 #include <OgreHlmsUnlitDatablock.h>
 #include <OgreHlmsPbs.h>
+#include <OgreHlmsPbsDatablock.h>
 
 #include <OgreVulkanRenderSystem.h>
 #include <OgreVulkanDevice.h>
+#include <OgreVulkanTextureGpu.h>
+#include <Compositor/OgreCompositorWorkspace.h>
+#include <Compositor/OgreCompositorNode.h>
 #include "PrismRTPipeline.h"
 #include "PrismCompositorPass.h"
 
@@ -200,8 +204,8 @@ struct SceneObject {
     float metallic  = 0.0f;
     float specTrans = 0.0f;
     float ior       = 1.5f;
-    float emissive  = 0.0f;
-    bool  isRaster  = false; // true → RT 셰이더에서 래스터 스타일 Lambert 셰이딩 사용 (하이브리드 데모)
+    float emissive   = 0.0f;
+    int   renderMode = 0;    // 0=풀PT  1=RT shadow+BRDF  2=GBuffer래스터+RTshadow
 };
 
 // ── OGRE 메시 헬퍼 (캐시 포함) ───────────────────────────
@@ -301,13 +305,25 @@ public:
         if (mCamera->getParentSceneNode()) mCamera->detachFromParent();
         mCamNode->attachObject(mCamera);
 
-        // 더미 방향광 (래스터 패스용)
+        // G-Buffer 래스터 패스용 조명 설정
+        // → Mode 2 (GBuffer+RTshadow) 오브젝트가 제대로 보이도록 균등하게 밝힘
+
+        // ① Hemisphere ambient: 모든 방향 벽을 균등하게 채움
+        mSceneMgr->setAmbientLight(
+            Ogre::ColourValue(0.6f, 0.6f, 0.6f),   // 상반구 (천장 쪽)
+            Ogre::ColourValue(0.2f, 0.2f, 0.2f),   // 하반구 (바닥 쪽)
+            Ogre::Vector3::UNIT_Y                    // "위" 방향
+        );
+
+        // ② 직하향 방향광 (천장 면광원 모사, 바닥/벽 전체 조명)
         auto light = mSceneMgr->createLight();
         light->setType(Ogre::Light::LT_DIRECTIONAL);
+        light->setDiffuseColour(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
+        light->setPowerScale(1.5f);
         auto lNode = mSceneMgr->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
         if (light->getParentSceneNode()) light->detachFromParent();
         lNode->attachObject(light);
-        lNode->setDirection(Ogre::Vector3(-1, -2, -1).normalisedCopy());
+        lNode->setDirection(Ogre::Vector3(0, -1, 0));
 
         setupScene();
 
@@ -383,7 +399,35 @@ public:
 
             comp->addWorkspaceDefinition("MainWS")->connectExternal(0, nodeDef->getName(), 0);
         }
-        comp->addWorkspace(mSceneMgr, mWindow->getTexture(), mCamera, "MainWS", true);
+        Ogre::CompositorWorkspace* ws =
+            comp->addWorkspace(mSceneMgr, mWindow->getTexture(), mCamera, "MainWS", true);
+
+        // G-Buffer 텍스처를 RT Descriptor Set(바인딩 7,8,9)에 연결
+        // addWorkspace() 이후 Compositor가 텍스처를 생성하므로 여기서 접근 가능.
+        if (ws) {
+            Ogre::CompositorNode* node = ws->findNode("RTPrismNode");
+            if (node) {
+                auto getVkTex = [&](const char* name) -> Ogre::VulkanTextureGpu* {
+                    Ogre::TextureGpu* tex = node->getDefinedTexture(name);
+                    if (!tex) return nullptr;
+                    return static_cast<Ogre::VulkanTextureGpu*>(tex);
+                };
+                auto* albedoTex   = getVkTex("gbuffer_albedo");
+                auto* normalTex   = getVkTex("gbuffer_normal");
+                auto* materialTex = getVkTex("gbuffer_material");
+
+                if (albedoTex && normalTex && materialTex) {
+                    mRTPipeline->setGBufferImages(
+                        albedoTex->getDefaultDisplaySrv(),
+                        normalTex->getDefaultDisplaySrv(),
+                        materialTex->getDefaultDisplaySrv(),
+                        albedoTex->getFinalTextureName(),
+                        normalTex->getFinalTextureName(),
+                        materialTex->getFinalTextureName());
+                }
+            }
+        }
+
         return true;
     }
 
@@ -430,12 +474,12 @@ public:
             // modelPath              pos                      scale               albedo                   rough  metal  specTr  ior   emit
             // ── 방 구조 ──────────────────────────────────────────────────────────────────────────
             // 바닥 top=−0.9 / 천장 bottom=11.9 → 벽은 y=−1.1~12.1 범위로 만들어 틈 제거
-            { basePath+"cube.obj", {  0,  -1,    0}, {20,    0.2f,  20  }, {0.8f, 0.8f, 0.8f}, 0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 바닥
-            { basePath+"cube.obj", {  0,  12,    0}, {20,    0.2f,  20  }, {1.0f, 1.0f, 1.0f}, 0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 천장
-            { basePath+"cube.obj", {  0,   5.5f,-10}, {20.4f,13.2f,  0.2f},{0.9f, 0.9f, 0.9f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 뒷벽  (center_y=5.5, h=13.2 → y∈[−1.1,12.1])
-            { basePath+"cube.obj", {-10,   5.5f,  0}, {0.2f, 13.2f, 20.4f},{0.8f, 0.1f, 0.1f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 왼벽  (빨강)
-            { basePath+"cube.obj", { 10,   5.5f,  0}, {0.2f, 13.2f, 20.4f},{0.1f, 0.8f, 0.1f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f }, // 오른벽 (초록)
-            { basePath+"cube.obj", {  0,  11.5f,  0}, {8,    0.1f,   8  }, {1.0f, 1.0f, 1.0f}, 0.5f, 0.0f, 0.0f, 1.5f, 4.0f }, // 면광원 (emissive)
+            { basePath+"cube.obj", {  0,  -1,    0}, {20,    0.2f,  20  }, {0.8f, 0.8f, 0.8f}, 0.8f, 0.0f, 0.0f, 1.5f, 0.0f, 0 }, // 바닥   (mode0: 풀 PT)
+            { basePath+"cube.obj", {  0,  12,    0}, {20,    0.2f,  20  }, {1.0f, 1.0f, 1.0f}, 0.8f, 0.0f, 0.0f, 1.5f, 0.0f, 2 }, // 천장   (mode2)
+            { basePath+"cube.obj", {  0,   5.5f,-10}, {20.4f,13.2f,  0.2f},{0.9f, 0.9f, 0.9f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f, 2 }, // 뒷벽   (mode2)
+            { basePath+"cube.obj", {-10,   5.5f,  0}, {0.2f, 13.2f, 20.4f},{0.8f, 0.1f, 0.1f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f, 2 }, // 왼벽   (mode2: 빨강)
+            { basePath+"cube.obj", { 10,   5.5f,  0}, {0.2f, 13.2f, 20.4f},{0.1f, 0.8f, 0.1f},0.8f, 0.0f, 0.0f, 1.5f, 0.0f, 2 }, // 오른벽 (mode2: 초록)
+            { basePath+"cube.obj", {  0,  11.5f,  0}, {8,    0.1f,   8  }, {1.0f, 1.0f, 1.0f}, 0.5f, 0.0f, 0.0f, 1.5f, 4.0f, 0 }, // 면광원 (emissive, 풀PT)
             // ── 오브젝트 박스들 ─────────────────────────────────────────────────────────────────
             // 왼쪽 tall — 맑은 유리 (center_y = −0.9 + 6/2 = 2.1)
             { basePath+"cube.obj", {-4.5f, 2.1f,  -6}, {3.5f, 6.0f, 3.5f}, {0.95f,0.97f,1.0f}, 0.0f, 0.0f, 1.0f,1.52f, 0.0f },
@@ -443,8 +487,8 @@ public:
             { basePath+"cube.obj", { 4.5f, 2.1f,  -6}, {3.5f, 6.0f, 3.5f}, {0.9f, 0.9f, 0.9f}, 0.02f,1.0f, 0.0f, 1.5f, 0.0f },
             // 중앙 — 토끼 받침대 (center_y = −0.9+1 = 0.1, top=1.1)
             { basePath+"cube.obj", {  0,   0.1f,  -5}, {3.0f, 2.0f, 3.0f}, {0.9f, 0.9f, 0.9f}, 0.8f, 0.0f, 0.0f, 1.5f, 0.0f },
-            // 왼쪽 앞 — 황금 거친 금속 [RASTER] isRaster=true: Lambert 셰이딩으로 표시
-            { basePath+"cube.obj", { -6,  -0.15f,-2.5f},{2.0f, 1.5f, 2.0f},{1.0f,0.77f,0.34f}, 0.4f, 1.0f, 0.0f, 1.5f, 0.0f, true },
+            // 왼쪽 앞 — 황금 거친 금속 (mode1: RT shadow + Disney BRDF)
+            { basePath+"cube.obj", { -6,  -0.15f,-2.5f},{2.0f, 1.5f, 2.0f},{1.0f,0.77f,0.34f}, 0.4f, 1.0f, 0.0f, 1.5f, 0.0f, 1 },
             // 오른쪽 앞 — 서리 유리 (Frosted Glass, specTrans=0.9, rough=0.3)
             { basePath+"cube.obj", {  6,  -0.15f,-2.5f},{2.0f, 1.5f, 2.0f},{0.9f, 0.9f, 1.0f}, 0.3f, 0.0f, 0.9f, 1.5f, 0.0f },
             // ── 토끼 (받침대 위) ───────────────────────────────────────────────────────────────
@@ -463,13 +507,34 @@ public:
             Ogre::MeshPtr mesh = loadMeshFromObj(obj.modelPath, vaoMgr);
             if (!mesh) continue;
 
-            // OGRE SceneNode (래스터 패스용 - RT 결과로 덮어쓰므로 투명 처리)
+            // OGRE SceneNode (래스터 패스 / G-Buffer 생성용)
             auto item = mSceneMgr->createItem(mesh);
             auto node = mSceneMgr->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode();
             if (item->getParentSceneNode()) item->detachFromParent();
             node->attachObject(item);
             node->setPosition(obj.position);
             node->setScale(obj.scale);
+
+            // ── G-Buffer용 PBS 데이터블록 설정 ─────────────────────────────
+            // roughness / metallic 을 HLMS PBS 에 주입 → custom_ps_posExecution 에서
+            // MRT attachment 1(normal), 2(material: roughness/metallic) 로 출력.
+            {
+                Ogre::HlmsPbs* hlmsPbs = static_cast<Ogre::HlmsPbs*>(
+                    mRoot->getHlmsManager()->getHlms(Ogre::HLMS_PBS));
+                Ogre::String dbName = "PrismMat_" + std::to_string(i);
+                auto* db = static_cast<Ogre::HlmsPbsDatablock*>(
+                    hlmsPbs->createDatablock(
+                        Ogre::IdString(dbName), dbName,
+                        Ogre::HlmsMacroblock(), Ogre::HlmsBlendblock(),
+                        Ogre::HlmsParamVec()));
+                db->setDiffuse(Ogre::Vector3(obj.albedo.x, obj.albedo.y, obj.albedo.z));
+                db->setRoughness(std::max(0.02f, obj.roughness));
+                if (obj.metallic > 0.01f) {
+                    db->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+                    db->setMetalness(obj.metallic);
+                }
+                item->setDatablock(db);
+            }
 
             // BLAS 빌드 (같은 OBJ 경로면 캐시)
             uint32_t meshIdx = mRTPipeline->buildBLAS(mesh, obj.modelPath);
@@ -480,10 +545,13 @@ public:
 
             // RT 오브젝트
             Prism::RTObject rtObj;
-            rtObj.blas        = VK_NULL_HANDLE; // 직접 쓰지 않음
-            rtObj.blasAddress = mRTPipeline->getBLASAddress(meshIdx);
-            rtObj.transform   = transform;
-            rtObj.customIndex = (uint32_t)i;
+            rtObj.blas         = VK_NULL_HANDLE; // 직접 쓰지 않음
+            rtObj.blasAddress  = mRTPipeline->getBLASAddress(meshIdx);
+            rtObj.transform    = transform;
+            rtObj.customIndex  = (uint32_t)i;
+            // emissive 오브젝트(면광원)는 shadow ray에서 제외: mask=0x02
+            // shadow ray cullMask=0xFD (0xFF & ~0x02) 로 면광원을 건너뜀
+            rtObj.instanceMask = (obj.emissive > 0.0f) ? 0x02u : 0xFFu;
             rtObjects.push_back(rtObj);
 
             // Material
@@ -493,7 +561,7 @@ public:
             mat.pbrParams1[0] = obj.emissive;  mat.pbrParams1[1] = obj.roughness;
             mat.pbrParams1[2] = obj.metallic;  mat.pbrParams1[3] = 0.0f;
             mat.pbrParams2[0] = obj.specTrans; mat.pbrParams2[1] = obj.ior;
-            mat.pbrParams2[2] = obj.isRaster ? 1.0f : 0.0f; // 하이브리드: 1.0 → RT에서 래스터 Lambert 셰이딩
+            mat.pbrParams2[2] = (float)obj.renderMode;   // 0=풀PT  1=RTshadow+BRDF  2=GBuffer+RTshadow
             materials.push_back(mat);
 
             // ObjDesc (셰이더에서 정점/인덱스 직접 접근)
@@ -501,6 +569,22 @@ public:
             desc.vertexAddress = mRTPipeline->getMeshVertexAddress(meshIdx);
             desc.indexAddress  = mRTPipeline->getMeshIndexAddress(meshIdx);
             objDescs.push_back(desc);
+        }
+
+        // ── OGRE 씬 라이트 (G-Buffer 래스터용) ─────────────────────────────────────
+        // Mode 2 (GBuffer+RTshadow) 오브젝트의 G-Buffer albedo 를 제대로 밝히기 위해
+        // RT 면광원 위치(Y=11.5)에 OGRE 포인트 라이트를 추가.
+        {
+            Ogre::Light* ogreLight = mSceneMgr->createLight();
+            ogreLight->setType(Ogre::Light::LT_POINT);
+            ogreLight->setDiffuseColour(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
+            ogreLight->setSpecularColour(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
+            // Cornell Box 스케일에서 적당한 밝기 (튜닝 가능)
+            ogreLight->setPowerScale(600.0f);
+            auto* lightNode = mSceneMgr->getRootSceneNode(Ogre::SCENE_DYNAMIC)
+                                        ->createChildSceneNode();
+            lightNode->attachObject(ogreLight);
+            lightNode->setPosition(0.0f, 11.0f, 0.0f);
         }
 
         // TLAS, 씬 버퍼, Descriptor Set 구성

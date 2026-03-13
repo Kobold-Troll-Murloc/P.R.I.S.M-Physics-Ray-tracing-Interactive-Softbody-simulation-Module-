@@ -109,6 +109,14 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMENT "Copying PRISM RT shaders to build directory..."
 )
 
+# Copy custom HLMS pieces into Media (merges with OGRE's default Media)
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/media"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/Media"
+    COMMENT "Copying custom HLMS pieces to Media directory..."
+)
+
 # Copy bunny.obj
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

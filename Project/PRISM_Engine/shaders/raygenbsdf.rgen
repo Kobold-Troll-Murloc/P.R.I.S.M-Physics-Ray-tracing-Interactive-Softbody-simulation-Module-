@@ -5,6 +5,10 @@ layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 1, rgba8) uniform image2D image;
 layout(set = 0, binding = 5) uniform sampler2D depthMap;
 layout(set = 0, binding = 6, rgba32f) uniform image2D accumImage;
+// ── G-Buffer (래스터 1st hit 재질 정보) ──────────────────────
+layout(set = 0, binding = 7) uniform sampler2D gbufferAlbedo;   // rgb: lit color, a: 히트 여부
+layout(set = 0, binding = 8) uniform sampler2D gbufferNormal;   // rgb: world normal
+layout(set = 0, binding = 9) uniform sampler2D gbufferMaterial; // r: roughness, g: metallic, b: specTrans
 
 struct Light {
     vec3 position;
@@ -34,6 +38,7 @@ struct HitPayload {
     float hitT;
     float specTrans;
     float ior;
+    float isRaster;   // 1.0 = 래스터 오브젝트 → shadow+specular 처리
 };
 
 layout(location = 0) rayPayloadEXT HitPayload payload;
@@ -202,26 +207,186 @@ void main() {
     // [PRISM] 배경색을 좀 더 밝고 시원한 톤으로 조정
     vec3 skyColor = vec3(0.1, 0.1, 0.2);
 
+    // ── G-Buffer 읽기: 래스터 1st-hit 재질 정보 ──────────────────────────
+    // UV는 NDC → [0,1] 변환 (jitter 없이 픽셀 중심 UV 사용)
+    vec2 gbUV = (vec2(pixelCoord) + 0.5) / vec2(gl_LaunchSizeEXT.xy);
+    vec4 gbMat = texture(gbufferMaterial, gbUV); // r: roughness, g: metallic, b: reserved(specTrans future)
+    float gbRoughness = gbMat.r;
+    float gbMetallic  = gbMat.g;
+
+    // 재질 분기: HLMS PBS G-Buffer 에서 읽은 roughness / metallic 기반 분기
+    //   - roughness < 0.35 : 거울·유리·토끼 → 풀 RT (7 bounces)
+    //   - metallic  > 0.30 : 금속 (rough gold, mirror) → 풀 RT (7 bounces)
+    //   - 그 외 (matte 벽/바닥) → 3 bounces (빠른 수렴)
+    //   - G-Buffer 데이터 없음 (첫 프레임 등) → 기본 7 bounces
+    bool gbDataValid = (gbMat.r + gbMat.g + gbMat.b + gbMat.a) > 0.01;
+    bool needsFullRT = !gbDataValid || (gbRoughness < 0.35) || (gbMetallic > 0.30);
+    int maxBounces = needsFullRT ? 7 : 3;
+
     vec4 target = ubo.projInverse * vec4(d.x, d.y, 1, 1);
     vec3 rayOrigin = (ubo.viewInverse * vec4(0,0,0,1)).xyz;
     vec3 rayDir = (ubo.viewInverse * vec4(normalize(target.xyz), 0)).xyz;
     vec3 throughput = vec3(1.0);
     vec3 pixelColor = vec3(0.0);
-    int maxBounces = 7;
 
     for(int depth = 0; depth < maxBounces; depth++) {
-        payload.hitT = -1.0; 
+        payload.hitT     = -1.0;
+        payload.isRaster = 0.0;
         float tMax = 10000.0;
         traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, 0, rayOrigin, 0.001, rayDir, tMax, 0);
-        
+
         if(payload.hitT < 0.0) {
             pixelColor += throughput * skyColor;
             break;
         }
+
+        // ── [HYBRID] 래스터 오브젝트: shadow ray + specular RT bounce ─────────────────
+        if (depth == 0 && payload.isRaster > 0.5) {
+            bool  modeB = payload.isRaster > 1.5;  // 2.0 = GBuffer+RTshadow
+            // 1st hit 재질 데이터를 로컬 변수로 보존 (이후 trace 가 payload 덮어씀)
+            vec3  P1  = payload.hitPos;
+            vec3  N1  = payload.normal;
+            vec3  gN1 = payload.geomNormal;
+            vec3  alb = payload.albedo;
+            float rou = payload.roughness;
+            float met = payload.metallic;
+            vec3  V   = -rayDir;
+
+            // ① Cornell Box 천장 면광원 (Y = 11.5)
+            vec3  lightPos  = vec3(0.0, 11.5, 0.0);
+            vec3  toLightV  = lightPos - P1;
+            float lightDist = length(toLightV);
+            toLightV = normalize(toLightV);
+            float NdotL = max(dot(N1, toLightV), 0.0);
+
+            // ② Shadow ray: 첫 번째 교차점에서 종료 → hitT 로 명암 판정
+            // cullMask=0xFD: 면광원(instanceMask=0x02) 제외 → 자가 차단 방지
+            float shadow = 0.15;   // 기본: occluded
+            if (NdotL > 0.0) {
+                payload.hitT     = -1.0;
+                payload.isRaster = 0.0;
+                traceRayEXT(topLevelAS,
+                    gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT,
+                    0xFD, 0, 0, 0,
+                    P1 + gN1 * 0.005, 0.001, toLightV, lightDist - 0.05, 0);
+                shadow = (payload.hitT < 0.0) ? 1.0 : 0.15;
+            }
+
+            // ③ Disney BRDF 직접조명
+            HitPayload bp;
+            bp.hitPos = P1; bp.normal = N1; bp.geomNormal = gN1;
+            bp.albedo = alb; bp.roughness = rou; bp.metallic = met;
+            bp.emissive = vec3(0.0); bp.hitT = 0.0;
+            bp.specTrans = 0.0; bp.ior = 1.5; bp.isRaster = 0.0;
+            vec3 direct  = EvaluateDisneyBRDF(bp, V, toLightV, N1) * NdotL * shadow * 4.0;
+            vec3 ambient = alb * (1.0 - met) * 0.05;
+
+            // ④ Specular RT bounce: 결정론적 reflect 방향 (노이즈 없음)
+            //    roughness < 0.35 또는 metallic > 0.3 인 오브젝트만 (거울/금속)
+            vec3 specBounce = vec3(0.0);
+            if (rou < 0.35 || met > 0.3) {
+                // GGX 랜덤 샘플 대신 순수 reflect 방향 → 결정론적
+                vec3 specDir = reflect(-V, N1);
+                if (dot(N1, specDir) > 0.0) {
+                    payload.hitT     = -1.0;
+                    payload.emissive = vec3(0.0);
+                    payload.isRaster = 0.0;
+                    traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xFF, 0, 0, 0,
+                                P1 + gN1 * 0.005, 0.001, specDir, 10000.0, 0);
+
+                    vec3 indirectSpec;
+                    if (payload.hitT < 0.0) {
+                        indirectSpec = skyColor;
+                    } else if (length(payload.emissive) > 0.001) {
+                        indirectSpec = payload.emissive;
+                    } else {
+                        indirectSpec = payload.albedo * 0.3;
+                    }
+
+                    vec3 F0v  = mix(vec3(0.04), alb, met);
+                    // 결정론적 Fresnel (V=reflect방향이므로 H=N1)
+                    vec3 Fres = F0v + (1.0 - F0v) * pow(1.0 - max(dot(N1, V), 0.0), 5.0);
+                    specBounce = indirectSpec * Fres * (1.0 - rou);
+                }
+            }
+
+            if (modeB) {
+                // Mode 2: OGRE G-Buffer 래스터 색 베이스 + RT shadow
+                // gbufferAlbedo = OGRE PBS 풀 셰이딩 결과 (노이즈 제로)
+                vec3 rasterColor = texture(gbufferAlbedo, gbUV).rgb;
+                pixelColor = rasterColor * shadow + specBounce;
+            } else {
+                // Mode 1: RT 재질 버퍼 기반 Disney BRDF + RT shadow
+                pixelColor = direct + ambient + specBounce;
+            }
+            break;
+        }
+        // ── [END HYBRID] ────────────────────────────────────────────────────────────
+
         if(length(payload.emissive) > 0.0) {
             pixelColor += throughput * payload.emissive;
             break;
         }
+
+        // ── NEE (Next Event Estimation): 면광원 직접 샘플링 ──────────────────────
+        // shadow trace 전에 payload 필드를 로컬 변수로 저장 → trace 후 복원
+        {
+            vec3  neePos = payload.hitPos;
+            vec3  neeN   = payload.normal;
+            vec3  neeGN  = payload.geomNormal;
+            vec3  neeAlb = payload.albedo;
+            float neeRou = payload.roughness;
+            float neeMet = payload.metallic;
+            float neeST  = payload.specTrans;
+            float neeIor = payload.ior;
+            vec3  neeV   = -rayDir;
+            bool  inside = dot(neeGN, rayDir) > 0.0;
+
+            if (!inside) {
+                vec2  xiL   = vec2(rand(seed), rand(seed));
+                vec3  lPos  = vec3((xiL.x - 0.5) * 8.0, 11.5, (xiL.y - 0.5) * 8.0);
+                vec3  toL   = lPos - neePos;
+                float lDist = length(toL);
+                toL /= lDist;
+                float NdL = max(dot(neeN, toL), 0.0);
+
+                if (NdL > 0.0) {
+                    payload.hitT     = -1.0;
+                    payload.isRaster = 0.0;
+                    // cullMask=0xFD: 면광원(instanceMask=0x02) 제외 → tMax 경계 자가차단 방지
+                    traceRayEXT(topLevelAS,
+                        gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT,
+                        0xFD, 0, 0, 0,
+                        neePos + neeGN * 0.005, 0.001, toL, lDist - 0.05, 0);
+
+                    if (payload.hitT < 0.0) {
+                        // payload 를 저장값으로 채워 BRDF 평가
+                        HitPayload hp;
+                        hp.hitPos=neePos; hp.normal=neeN; hp.geomNormal=neeGN;
+                        hp.albedo=neeAlb; hp.roughness=neeRou; hp.metallic=neeMet;
+                        hp.specTrans=neeST; hp.ior=neeIor;
+                        hp.emissive=vec3(0); hp.hitT=0; hp.isRaster=0;
+
+                        vec3  brdfNEE = EvaluateDisneyBRDF(hp, neeV, toL, neeN);
+                        float cosL = max(dot(vec3(0,-1,0), -toL), 0.0); // 면광원 법선(-Y)
+                        float pdf  = (lDist * lDist) / max(64.0 * cosL, 0.001);
+                        vec3  neeC = throughput * brdfNEE * NdL * vec3(4.0) / max(pdf, 0.001);
+                        if (!isnan(neeC.x) && !isinf(neeC.x))
+                            pixelColor += min(neeC, vec3(20.0)); // firefly 방지
+                    }
+                }
+            }
+
+            // shadow trace 가 덮어쓴 payload 복원
+            payload.hitPos    = neePos;  payload.normal    = neeN;
+            payload.geomNormal= neeGN;   payload.albedo    = neeAlb;
+            payload.roughness = neeRou;  payload.metallic  = neeMet;
+            payload.specTrans = neeST;   payload.ior       = neeIor;
+            payload.emissive  = vec3(0); payload.isRaster  = 0.0;
+            payload.hitT      = 0.0;
+        }
+        // ── [END NEE] ────────────────────────────────────────────────────────────
+
         vec3 V = -rayDir;
         vec2 xi = vec2(rand(seed), rand(seed));
         vec3 L;

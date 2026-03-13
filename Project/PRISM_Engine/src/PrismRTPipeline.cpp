@@ -84,7 +84,8 @@ namespace Prism {
             destroyImage(mStorageImage, mStorageImageView, mStorageImageMemory);
             destroyImage(mAccumImage,   mAccumImageView,   mAccumImageMemory);
             destroyImage(mDummyDepthImage, mDummyDepthView, mDummyDepthMemory);
-            if (mDummySampler != VK_NULL_HANDLE) vkDestroySampler(device, mDummySampler, nullptr);
+            if (mDummySampler    != VK_NULL_HANDLE) vkDestroySampler(device, mDummySampler,    nullptr);
+            if (mGBufferSampler  != VK_NULL_HANDLE) vkDestroySampler(device, mGBufferSampler,  nullptr);
 
             if (mCommandPool   != VK_NULL_HANDLE) vkDestroyCommandPool(device, mCommandPool, nullptr);
             if (mDescriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device, mDescriptorSetLayout, nullptr);
@@ -166,6 +167,9 @@ namespace Prism {
         add(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR); // ObjDescs
         add(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR); // Depth
         add(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR); // Accum
+        add(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR); // G-Buffer albedo
+        add(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR); // G-Buffer normal
+        add(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR); // G-Buffer material
 
         VkDescriptorSetLayoutCreateInfo lci = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         lci.bindingCount = (uint32_t)b.size(); lci.pBindings = b.data();
@@ -324,7 +328,7 @@ namespace Prism {
             for (int r = 0; r < 3; r++)
                 for (int c = 0; c < 4; c++)
                     instances[i].transform.matrix[r][c] = m[r][c];
-            instances[i].mask                            = 0xFF;
+            instances[i].mask                            = objects[i].instanceMask;
             instances[i].accelerationStructureReference  = objects[i].blasAddress;
             instances[i].flags                           = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
             instances[i].instanceCustomIndex             = (uint32_t)i;
@@ -503,7 +507,7 @@ namespace Prism {
             { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 },
             { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 },
             { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 },
-            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 }
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 }  // binding5(depth) + 7,8,9(gbuffer)
         };
         VkDescriptorPoolCreateInfo pci = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
         pci.maxSets = 1; pci.poolSizeCount = (uint32_t)poolSizes.size(); pci.pPoolSizes = poolSizes.data();
@@ -534,8 +538,53 @@ namespace Prism {
         VkWriteDescriptorSet w4 = w(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);             w4.pBufferInfo = &objInfo; writes.push_back(w4);
         VkWriteDescriptorSet w5 = w(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);     w5.pImageInfo  = &depInfo; writes.push_back(w5);
         VkWriteDescriptorSet w6 = w(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);              w6.pImageInfo  = &accInfo; writes.push_back(w6);
+        // 바인딩 7,8,9: G-Buffer (초기에는 dummy depth로, setGBufferImages()로 이후 갱신)
+        VkWriteDescriptorSet w7 = w(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);     w7.pImageInfo  = &depInfo; writes.push_back(w7);
+        VkWriteDescriptorSet w8 = w(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);     w8.pImageInfo  = &depInfo; writes.push_back(w8);
+        VkWriteDescriptorSet w9 = w(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);     w9.pImageInfo  = &depInfo; writes.push_back(w9);
 
         vkUpdateDescriptorSets(device, (uint32_t)writes.size(), writes.data(), 0, nullptr);
+    }
+
+    void RTPipeline::setGBufferImages(VkImageView albedoView, VkImageView normalView, VkImageView materialView,
+                                      VkImage albedoImg, VkImage normalImg, VkImage materialImg)
+    {
+        VkDevice device = mDevice->mDevice;
+
+        // G-Buffer VkImage 저장 (PASS_CUSTOM 배리어에서 사용)
+        mGBufferAlbedoImage   = albedoImg;
+        mGBufferNormalImage   = normalImg;
+        mGBufferMaterialImage = materialImg;
+
+        // G-Buffer 전용 Sampler (NEAREST, CLAMP)
+        if (mGBufferSampler == VK_NULL_HANDLE) {
+            VkSamplerCreateInfo si = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+            si.magFilter     = VK_FILTER_NEAREST;
+            si.minFilter     = VK_FILTER_NEAREST;
+            si.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            si.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            si.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            si.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            vkCreateSampler(device, &si, nullptr, &mGBufferSampler);
+        }
+
+        // descriptor 갱신 (bindings 7, 8, 9)
+        VkDescriptorImageInfo infos[3] = {
+            { mGBufferSampler, albedoView,   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL },
+            { mGBufferSampler, normalView,   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL },
+            { mGBufferSampler, materialView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL },
+        };
+        VkWriteDescriptorSet writes[3] = {};
+        for (int i = 0; i < 3; i++) {
+            writes[i].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstSet          = mDescriptorSet;
+            writes[i].dstBinding      = 7 + i;
+            writes[i].descriptorCount = 1;
+            writes[i].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[i].pImageInfo      = &infos[i];
+        }
+        vkUpdateDescriptorSets(device, 3, writes, 0, nullptr);
+        Ogre::LogManager::getSingleton().logMessage("[PRISM] G-Buffer bound: bindings 7,8,9 updated");
     }
 
     void RTPipeline::updateCameraUBO(const Ogre::Matrix4& view, const Ogre::Matrix4& proj, const Ogre::Vector3& camPos, int frameCount) {

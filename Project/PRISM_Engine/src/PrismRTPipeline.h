@@ -56,6 +56,7 @@ namespace Prism {
         VkDeviceAddress blasAddress;
         Ogre::Matrix4 transform;
         uint32_t customIndex;
+        uint32_t instanceMask = 0xFF;  // shadow ray cull mask용: emissive light = 0x02, 나머지 = 0xFF
     };
 
     // 메시 하나당 BLAS + Vertex/Index 버퍼
@@ -113,6 +114,17 @@ namespace Prism {
         // Descriptor Set 구성 (createSceneBuffers 이후 호출)
         void createDescriptorSet();
 
+        // G-Buffer 텍스처 연동 (addWorkspace 이후 호출)
+        // albedoView/normalView/materialView: OGRE getDefaultDisplaySrv()
+        // albedoImg/normalImg/materialImg:    OGRE getFinalTextureName()
+        void setGBufferImages(VkImageView albedoView, VkImageView normalView, VkImageView materialView,
+                              VkImage albedoImg,     VkImage normalImg,     VkImage materialImg);
+
+        // G-Buffer VkImage 게터 (PASS_CUSTOM 배리어에서 사용)
+        VkImage getGBufferAlbedo()   const { return mGBufferAlbedoImage;   }
+        VkImage getGBufferNormal()   const { return mGBufferNormalImage;   }
+        VkImage getGBufferMaterial() const { return mGBufferMaterialImage; }
+
     private:
         Ogre::VulkanRenderSystem* mRenderSystem;
         Ogre::VulkanDevice* mDevice;
@@ -150,6 +162,12 @@ namespace Prism {
         VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
         VkDescriptorSet  mDescriptorSet  = VK_NULL_HANDLE;
         VkDescriptorSetLayout mDescriptorSetLayout = VK_NULL_HANDLE;
+
+        // G-Buffer (Bindings 7, 8, 9)
+        VkImage     mGBufferAlbedoImage   = VK_NULL_HANDLE;
+        VkImage     mGBufferNormalImage   = VK_NULL_HANDLE;
+        VkImage     mGBufferMaterialImage = VK_NULL_HANDLE;
+        VkSampler   mGBufferSampler       = VK_NULL_HANDLE;
 
         // Depth dummy (Binding 5)
         VkImage        mDummyDepthImage  = VK_NULL_HANDLE;

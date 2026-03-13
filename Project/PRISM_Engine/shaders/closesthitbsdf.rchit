@@ -52,6 +52,7 @@ struct HitPayload {
     float hitT;
     float specTrans;
     float ior;
+    float isRaster;   // 1.0 = 래스터 오브젝트 → raygen에서 shadow+specular 처리
 };
 
 layout(buffer_reference, scalar) buffer Vertices { Vertex v[]; };
@@ -95,6 +96,10 @@ void main() {
     
     vec3 geomNormal = normalize(cross(v1 - v0, v2 - v0));
     vec3 worldGeomNormal = normalize(vec3(geomNormal * gl_WorldToObjectEXT));
+    // cube.obj Top/Bottom face의 와인딩 순서로 인해 cross product geomNormal이
+    // 정점 노말(worldNormal)과 반대 방향이 되는 경우 수정
+    if (dot(worldGeomNormal, worldNormal) < 0.0)
+        worldGeomNormal = -worldGeomNormal;
 
     InstanceMaterial mat = materials[idx];
 
@@ -103,27 +108,22 @@ void main() {
     payload.geomNormal= worldGeomNormal;
     payload.hitT      = gl_HitTEXT;
 
-    // ── [HYBRID] pbrParams2.z == 1.0 → 래스터라이제이션 셰이딩 (Lambert + ambient) ──
-    // 이 박스는 RT BSDF가 아닌 간단한 직접광 셰이딩으로 처리.
-    // 결과를 emissive로 넘겨 raygen이 즉시 픽셀 색으로 채택하게 함 (bounce 없음).
+    // ── [HYBRID] pbrParams2.z == 1.0 → 래스터 오브젝트 표시 ──────────────────────────
+    // raygen 에서 shadow ray + specular bounce 로 처리.
+    // closesthit 에서는 재질 데이터만 전달하고 isRaster 플래그를 세운다.
     if (mat.pbrParams2.z > 0.5) {
-        vec3  baseColor = mat.albedo.rgb;
-        // 면광원 중심에서 직접광 (Lambert diffuse)
-        vec3  lightPos  = vec3(0.0, 11.0, 0.0);
-        vec3  toLight   = normalize(lightPos - payload.hitPos);
-        float NdotL     = max(dot(worldNormal, toLight), 0.0);
-        vec3  ambient   = baseColor * 0.08;
-        vec3  diffuse   = baseColor * NdotL * 2.5;
-        payload.emissive  = ambient + diffuse;
-        payload.albedo    = vec3(0.0);
-        payload.roughness = 0.0;
-        payload.metallic  = 0.0;
+        payload.isRaster  = mat.pbrParams2.z;   // 1.0=modeA  2.0=modeB
+        payload.albedo    = mat.albedo.rgb;
+        payload.roughness = max(mat.pbrParams1.y, 0.04);
+        payload.metallic  = mat.pbrParams1.z;
+        payload.emissive  = vec3(0.0);
         payload.specTrans = 0.0;
         payload.ior       = 1.5;
         return;
     }
     // ────────────────────────────────────────────────────────────────────────────────
 
+    payload.isRaster  = 0.0;
     payload.albedo    = mat.albedo.rgb;
     payload.roughness = mat.pbrParams1.y;
     payload.metallic  = mat.pbrParams1.z;

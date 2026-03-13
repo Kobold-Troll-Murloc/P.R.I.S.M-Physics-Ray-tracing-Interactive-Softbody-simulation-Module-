@@ -1,18 +1,19 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
 
-// [수정] raygen, closesthit과 완전히 동일한 구조체로 맞추어야 합니다!
+// raygen, closesthit 과 완전히 동일한 구조체로 맞춰야 합니다
 struct HitPayload {
     vec3 hitPos;
     vec3 normal;
+    vec3 geomNormal;
     vec3 albedo;
     float roughness;
     float metallic;
     vec3 emissive;
     float hitT;
-    // --- [추가] ---
-    float specTrans; // 투명도
-    float ior;       // 굴절률
+    float specTrans;
+    float ior;
+    float isRaster;
 };
 
 layout(location = 0) rayPayloadInEXT HitPayload payload;

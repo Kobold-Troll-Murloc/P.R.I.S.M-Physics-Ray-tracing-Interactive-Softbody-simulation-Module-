@@ -30,19 +30,9 @@ namespace Prism {
     }
 
     void RTPass::execute(const Ogre::Camera* lodCamera) {
-        Ogre::LogManager::getSingleton().logMessage("[PRISM RT] execute() called");
-        if (!mRTPipeline || mRTPipeline->getPipeline() == VK_NULL_HANDLE) {
-            Ogre::LogManager::getSingleton().logMessage("[PRISM RT] SKIP: pipeline null");
-            return;
-        }
-        if (mRTPipeline->getDescriptorSet() == VK_NULL_HANDLE) {
-            Ogre::LogManager::getSingleton().logMessage("[PRISM RT] SKIP: descriptor null");
-            return;
-        }
-        if (!mWindow) {
-            Ogre::LogManager::getSingleton().logMessage("[PRISM RT] SKIP: window null");
-            return;
-        }
+        if (!mRTPipeline || mRTPipeline->getPipeline() == VK_NULL_HANDLE) return;
+        if (mRTPipeline->getDescriptorSet() == VK_NULL_HANDLE) return;
+        if (!mWindow) return;
 
         Ogre::VulkanRenderSystem* rs = static_cast<Ogre::VulkanRenderSystem*>(
             Ogre::Root::getSingleton().getRenderSystem());
@@ -53,14 +43,38 @@ namespace Prism {
         device->mGraphicsQueue.endAllEncoders();
 
         VkCommandBuffer cmdBuf = device->mGraphicsQueue.getCurrentCmdBuffer();
-        if (cmdBuf == VK_NULL_HANDLE) {
-            Ogre::LogManager::getSingleton().logMessage("[PRISM RT] cmdBuf is NULL, skipping");
-            return;
-        }
-        Ogre::LogManager::getSingleton().logMessage("[PRISM RT] tracing rays...");
+        if (cmdBuf == VK_NULL_HANDLE) return;
 
         uint32_t width  = mRTPipeline->getRTWidth();
         uint32_t height = mRTPipeline->getRTHeight();
+
+        // ── G-Buffer 레이아웃 전환: COLOR_ATTACHMENT → SHADER_READ_ONLY ──────
+        // PASS_SCENE(mrtGBuffer)이 쓰고 난 G-Buffer를 RT 셰이더가 샘플링하기 위해 전환.
+        {
+            VkImage gbuffers[3] = {
+                mRTPipeline->getGBufferAlbedo(),
+                mRTPipeline->getGBufferNormal(),
+                mRTPipeline->getGBufferMaterial()
+            };
+            if (gbuffers[0] != VK_NULL_HANDLE) {
+                VkImageMemoryBarrier barriers[3] = {};
+                for (int i = 0; i < 3; i++) {
+                    barriers[i].sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    barriers[i].oldLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                    barriers[i].newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barriers[i].image               = gbuffers[i];
+                    barriers[i].subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+                    barriers[i].srcAccessMask       = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                    barriers[i].dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+                }
+                vkCmdPipelineBarrier(cmdBuf,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                    0, 0, nullptr, 0, nullptr, 3, barriers);
+            }
+        }
 
         // ── Phase 3: Ray Tracing 실행 ──────────────────────────────────────
         mRTPipeline->recordRayTracingCommands(cmdBuf, mRTPipeline->getDescriptorSet(), width, height);
@@ -147,6 +161,34 @@ namespace Prism {
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
             0, 0, nullptr, 0, nullptr, 2, postCopyBarriers);
+
+        // ── G-Buffer 레이아웃 복원: SHADER_READ_ONLY → COLOR_ATTACHMENT ──────
+        // 다음 프레임 PASS_SCENE(mrtGBuffer)이 G-Buffer를 다시 쓰기 위해 복원.
+        {
+            VkImage gbuffers[3] = {
+                mRTPipeline->getGBufferAlbedo(),
+                mRTPipeline->getGBufferNormal(),
+                mRTPipeline->getGBufferMaterial()
+            };
+            if (gbuffers[0] != VK_NULL_HANDLE) {
+                VkImageMemoryBarrier barriers[3] = {};
+                for (int i = 0; i < 3; i++) {
+                    barriers[i].sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    barriers[i].oldLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    barriers[i].newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                    barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barriers[i].image               = gbuffers[i];
+                    barriers[i].subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+                    barriers[i].srcAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+                    barriers[i].dstAccessMask       = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                }
+                vkCmdPipelineBarrier(cmdBuf,
+                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    0, 0, nullptr, 0, nullptr, 3, barriers);
+            }
+        }
     }
 
 }
